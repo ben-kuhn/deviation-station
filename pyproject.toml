@@ -1,0 +1,40 @@
+[build-system]
+requires = [ "hatchling>=1.25" ]
+build-backend = "hatchling.build"
+
+[project]
+name = "gnuradio-deviation-meter"
+version = "0.1.0"
+description = "Bessel-null and discriminator-based FM deviation meter for GNU Radio"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+gui = [
+  "PyQt6>=6.6",
+]
+sdr = [
+  "SoapySDR>=0.8",
+]
+test = [
+  "pytest>=8.0",
+]
+dev = [
+  "pytest>=8.0",
+  "scipy>=1.11",
+]
+
+[project.scripts]
+deviation-meter = "deviation_meter.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = [ "src/deviation_meter" ]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = [ "tests" ]
+pythonpath = [ "src" ]
