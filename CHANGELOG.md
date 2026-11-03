@@ -12,6 +12,16 @@
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
 
+### Measurement UI
+
+- Added an active-profile nominal deviation reference to the digital pane and
+  amber reference marks on the analog meter.
+- Added a **Deviation Ref…** dialog covering M17, DMR, analog FM, and Bessel
+  references.
+- Expanded remote-Direwolf field tooltips and added a **Remote requirements…**
+  checklist covering SSH authentication, remote PipeWire, RF geometry,
+  `ADEVICE`, remote `rigctld`, and PTT/watchdog behavior.
+
 ### Fixed
 
 - Boolean application settings are parsed explicitly, so a stored `false`

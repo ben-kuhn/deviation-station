@@ -138,12 +138,32 @@ The measure screen provides:
 
 - White-on-dark analog deviation meter
 - Large digital outer-symbol deviation readout
+- Active-profile nominal deviation reference and amber meter marks
+- **Deviation Ref…** dialog with M17, DMR, analog FM, and Bessel references
 - M17/DMR profile selection
 - Live scrolling waterfall
 - Per-window segment and DMR burst status
 - Simulator and live SoapySDR sources
 - Responsive scaling for 720p, 1080p, and arbitrary resized windows
 - Bessel carrier-lock and automatic null capture
+
+### Deviation references
+
+The digital pane shows the nominal reference for the active profile, and the
+analog meter marks that value in amber. The shared **Deviation Ref…** button in
+the bottom bar opens the complete table:
+
+| Profile | Nominal reference | Definition |
+|---|---|---|
+| Module17 / M17 | 2.400 kHz outer, 0.800 kHz inner | M17 4FSK, 4800 symbols/s |
+| MMDVM / DMR | 1.944 kHz outer, 0.648 kHz inner | ETSI DMR 4FSK, 4800 symbols/s |
+| Generic FM | ±2.5 kHz narrowband, ±5.0 kHz wideband | Typical analog FM speech peak |
+| Bessel J0 | 2.4048 × tone (1st), 5.5201 × tone (2nd) | Absolute steady-tone null |
+
+Digital readings and meter marks use the outer-symbol deviation. Generic FM is
+a robust peak measurement; the narrowband/wideband values are common references,
+not regulatory or pass/fail limits. Use a Bessel null to validate absolute
+accuracy for a steady tone.
 
 ### Bessel-null measurement
 
@@ -273,7 +293,9 @@ frequency-match rules as local calibration.
 
 If startup fails, check non-interactive SSH, the remote `PATH` for
 `direwolf`/`pw-dump`/`wpctl`, the remote `XDG_RUNTIME_DIR`/PipeWire session, and
-whether another remote Direwolf process is still running.
+whether another remote Direwolf process is still running. The remote fields
+have tooltips and the **Remote requirements…** button in SDR / Rig repeats the
+full checklist.
 
 The SSH transport and remote process lifecycle are unit-tested with a simulated
 remote host. A real remote-site test still needs to confirm RF reception, remote

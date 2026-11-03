@@ -80,6 +80,14 @@ from .rehearsal import (
     TargetRehearsalPlant,
 )
 from .remote_direwolf import RemoteDirewolfCalibration, RemoteDirewolfConfig
+from .reference import (
+    BESSEL_REFERENCE_DETAIL,
+    GENERIC_FM_REFERENCE,
+    PROFILE_REFERENCES,
+    DeviationReference,
+    bessel_reference,
+    reference_for_profile,
+)
 from .rigctl import RigctldClient, RigctldError
 from .ssh import SshError
 from .target_cal import (
@@ -101,6 +109,26 @@ GRID = QColor("#343b44")
 
 SOURCE_SIMULATOR = "simulator"
 SOURCE_LIVE = "live"
+
+_REMOTE_HELP_TEXT = (
+    "Remote Direwolf is used by the Auto-Calibrate generator. The SDR stays "
+    "local and must hear the remote transmitter over RF; no SDR IQ is sent "
+    "over SSH.\n\n"
+    "• SSH must work non-interactively with key authentication, for example "
+    "ssh -o BatchMode=yes host true.\n"
+    "• The remote host needs direwolf, PipeWire, pw-dump, wpctl, timeout, and "
+    "pgrep. The remote user's PipeWire session must be available.\n"
+    "• The selected Direwolf file is a local template. Its ADEVICE, ARATE, "
+    "ACHANNELS, and MODEM values are uploaded; ADEVICE must exist remotely.\n"
+    "• Stop any normal Direwolf instance on the remote host before starting.\n"
+    "• The remote rigctld host and port must be reachable from this machine "
+    "and from the remote host, and rigctld must listen on a reachable "
+    "address. Do not use 127.0.0.1 unless both ends are the same machine.\n"
+    "• Remote Direwolf owns PTT; the application verifies PTT through the "
+    "network and uses a remote timeout watchdog as a backstop.\n"
+    "• SSH forwarding is not required or used."
+)
+
 
 
 def _settings_bool(value: object, default: bool = False) -> bool:
@@ -243,6 +271,7 @@ class AnalogMeter(QWidget):
         self._value_hz: float | None = None
         self._max_hz = 3000.0
         self._status = "WAITING"
+        self._reference_marks: list[tuple[float, str]] = []
 
     def set_value(self, value_hz: float | None, status: str = "") -> None:
         self._value_hz = value_hz
@@ -251,6 +280,14 @@ class AnalogMeter(QWidget):
 
     def set_range_hz(self, maximum_hz: float) -> None:
         self._max_hz = float(maximum_hz)
+        self.update()
+
+    def set_reference_marks(self, marks) -> None:
+        self._reference_marks = [
+            (float(hz), str(label))
+            for hz, label in marks
+            if math.isfinite(float(hz)) and float(hz) > 0.0
+        ]
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -326,6 +363,53 @@ class AnalogMeter(QWidget):
                 center + direction * (radius - 9.0 * unit),
                 center + direction * radius,
             )
+
+        reference_font = QFont("DejaVu Sans")
+        reference_font.setPixelSize(max(9, int(round(10.0 * unit))))
+        reference_font.setBold(True)
+        for reference_hz, reference_label in self._reference_marks:
+            if reference_hz > self._max_hz:
+                continue
+            fraction = reference_hz / self._max_hz
+            angle_degrees = start_degrees + fraction * sweep_degrees
+            angle = math.radians(angle_degrees)
+            direction = QPointF(math.cos(angle), -math.sin(angle))
+            painter.setPen(QPen(AMBER, 3.0 * unit))
+            painter.drawLine(
+                center + direction * (radius - 20.0 * unit),
+                center + direction * (radius + 2.0 * unit),
+            )
+            side = QPointF(-math.sin(angle), -math.cos(angle)) * (4.0 * unit)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(AMBER)
+            painter.drawPolygon(
+                QPolygonF(
+                    [
+                        center + direction * (radius + 10.0 * unit),
+                        center + direction * (radius + 1.0 * unit) + side,
+                        center + direction * (radius + 1.0 * unit) - side,
+                    ]
+                )
+            )
+            painter.setFont(reference_font)
+            painter.setPen(AMBER)
+            label_width = 58.0 * unit
+            label_height = 18.0 * unit
+            label_point = center + direction * (radius + 24.0 * unit)
+            label_x = min(
+                max(label_point.x() - label_width / 2.0, 2.0),
+                width - label_width - 2.0,
+            )
+            label_y = min(
+                max(label_point.y() - label_height / 2.0, 2.0),
+                height - label_height - 2.0,
+            )
+            painter.drawText(
+                QRectF(label_x, label_y, label_width, label_height),
+                Qt.AlignmentFlag.AlignCenter,
+                reference_label,
+            )
+        painter.setBrush(Qt.BrushStyle.NoBrush)
 
         range_font = QFont("DejaVu Sans")
         range_font.setPixelSize(max(10, int(round(16.0 * unit))))
@@ -408,6 +492,15 @@ class DigitalPane(QFrame):
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addWidget(self.status_label)
         self.definition_label.setWordWrap(True)
+        self.reference_label = QLabel("")
+        self.reference_label.setStyleSheet(
+            "border: none; color: #ffbf47; letter-spacing: 0px;"
+        )
+        self.reference_label.setFont(QFont("DejaVu Sans", 10))
+        self.reference_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.reference_label.setWordWrap(False)
+        layout.addWidget(self.reference_label)
+        self._ui_scale = 1.0
         self._update_fonts()
 
     @staticmethod
@@ -417,21 +510,32 @@ class DigitalPane(QFrame):
         font.setBold(bold)
         return font
 
+    def set_ui_scale(self, scale: float) -> None:
+        self._ui_scale = max(0.8, min(1.8, float(scale)))
+        self._update_fonts()
+        self._fit_value_font()
+
     def _update_fonts(self) -> None:
         height = max(1, self.height())
         title_size = max(12.0, height * 0.075)
         value_size = max(28.0, height * 0.36)
         detail_size = max(12.0, height * 0.075)
         status_size = max(11.0, height * 0.065)
+        reference_size = max(9.0, height * 0.055)
         self.title_label.setFont(self._pixel_font(title_size, True))
         self.value_label.setFont(self._pixel_font(value_size, True))
         self.definition_label.setFont(self._pixel_font(detail_size))
+        self.reference_label.setFont(self._pixel_font(reference_size, True))
         self.status_label.setFont(self._pixel_font(status_size))
 
     def _fit_value_font(self) -> None:
         text = self.value_label.text() or "8.888 kHz"
         available = max(80, self.width() - 40)
-        size = max(28, int(round(max(1, self.height()) * 0.36)))
+        size = max(
+            28,
+            int(round(max(1, self.height()) * 0.36)),
+            int(round(75.0 * self._ui_scale)),
+        )
         while size > 24:
             font = self._pixel_font(size, True)
             if QFontMetrics(font).horizontalAdvance(text) <= available:
@@ -458,7 +562,27 @@ class DigitalPane(QFrame):
         self.status_label.setStyleSheet(f"border: none; color: {color};")
         self._fit_value_font()
 
+    def set_reference(
+        self,
+        reference: DeviationReference | None,
+        *,
+        prefix: str = "REF",
+    ) -> None:
+        if reference is None:
+            self.reference_label.setText("")
+            self.reference_label.setToolTip("")
+            return
+        self.reference_label.setText(
+            f"{prefix} · {reference.label} · "
+            f"{reference.short or reference.summary}"
+        )
+        self.reference_label.setToolTip(reference.tooltip)
+
     def set_bessel(self, progress: BesselProgress) -> None:
+        self.set_reference(
+            bessel_reference(progress.null_index, progress.tone_frequency_hz),
+            prefix="ABSOLUTE REF",
+        )
         definition = (
             f"BESSEL · J0 null {progress.null_index} · "
             f"{progress.tone_frequency_hz / 1000.0:.3f} kHz tone"
@@ -507,6 +631,7 @@ class DigitalPane(QFrame):
         target_hz: float,
         state: str,
     ) -> None:
+        self.set_reference(GENERIC_FM_REFERENCE)
         deviation = getattr(reading, "deviation_hz", None)
         if reading is None or deviation is None:
             self._show_readout(
@@ -539,7 +664,16 @@ class DigitalPane(QFrame):
         snapshot: LiveSnapshot | None,
         *,
         source_label: str,
+        profile_id: str | None = None,
     ) -> None:
+        if snapshot is not None:
+            reference = reference_for_profile(snapshot.profile_id)
+        elif profile_id is not None:
+            reference = reference_for_profile(profile_id)
+        else:
+            reference = None
+        if reference is not None:
+            self.set_reference(reference)
         if snapshot is None or snapshot.reporting_deviation_hz is None:
             self.value_label.setText("—")
             self.definition_label.setText(source_label)
@@ -653,10 +787,65 @@ class WaterfallWidget(QWidget):
         painter.end()
 
 
+class DeviationReferenceDialog(QDialog):
+    """Show nominal deviation references and the Bessel absolute reference."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Deviation references")
+        self.setMinimumWidth(620)
+        self.resize(620, 360)
+        layout = QVBoxLayout(self)
+
+        intro = QLabel(
+            "Nominal guidance for the available profiles. These are not "
+            "pass/fail limits; transmitter drive, audio processing, and "
+            "measurement bandwidth still matter."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color: #b7bcc2;")
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+        for reference in PROFILE_REFERENCES.values():
+            value = reference.summary
+            if reference.symbol_rate_hz is not None:
+                value += f" · {reference.symbol_rate_hz:g} sym/s"
+            value_label = QLabel(value)
+            value_label.setWordWrap(True)
+            value_label.setToolTip(reference.tooltip)
+            form.addRow(reference.label, value_label)
+
+        bessel = QLabel(
+            "Δf = 2.4048 × tone (1st J0), 5.5201 × tone (2nd J0). "
+            "Absolute steady-tone reference; no SDR amplitude correction."
+        )
+        bessel.setWordWrap(True)
+        bessel.setToolTip(BESSEL_REFERENCE_DETAIL)
+        form.addRow("Bessel J0", bessel)
+        layout.addLayout(form)
+
+        definition = QLabel(
+            "Digital readings are outer-symbol deviations. Generic FM is a "
+            "robust peak measurement. A Bessel null is the absolute reference "
+            "for a steady tone; use it to validate discriminator readings."
+        )
+        definition.setWordWrap(True)
+        definition.setStyleSheet("color: #b7bcc2;")
+        layout.addWidget(definition)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.clicked.connect(self.accept)
+        layout.addWidget(buttons)
+
+
 class DeviceDialog(QDialog):
     def __init__(self, settings: DeviceSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("SDR and rig settings")
+        self.setMinimumWidth(640)
         form = QFormLayout(self)
 
         self.device_args = QLineEdit(settings.device_args)
@@ -715,9 +904,18 @@ class DeviceDialog(QDialog):
             "Run Direwolf on a remote host via SSH"
         )
         self.direwolf_remote.setChecked(settings.direwolf_remote)
+        self.direwolf_remote.setToolTip(
+            "Use SSH to run the Auto-Calibrate Direwolf source remotely. "
+            "Only control and remote stream volume cross SSH; SDR IQ stays "
+            "local. Open Remote requirements… for the full checklist."
+        )
         form.addRow("Remote Direwolf", self.direwolf_remote)
         self.direwolf_ssh_host = QLineEdit(settings.direwolf_ssh_host)
         self.direwolf_ssh_host.setPlaceholderText("SSH host or ~/.ssh/config alias")
+        self.direwolf_ssh_host.setToolTip(
+            "SSH destination for the remote Direwolf host. BatchMode key "
+            "authentication is required; password prompts are not supported."
+        )
         form.addRow("SSH host", self.direwolf_ssh_host)
         self.direwolf_remote_rig_host = QLineEdit(
             settings.direwolf_remote_rig_host
@@ -725,22 +923,40 @@ class DeviceDialog(QDialog):
         self.direwolf_remote_rig_host.setPlaceholderText(
             "rigctld host reachable from this machine and the remote host"
         )
+        self.direwolf_remote_rig_host.setToolTip(
+            "The remote rigctld must be reachable from this machine and from "
+            "the remote Direwolf host. rigctld must listen on a reachable "
+            "interface. Do not use 127.0.0.1 unless both ends are local."
+        )
         form.addRow("Remote rigctld host", self.direwolf_remote_rig_host)
         self.direwolf_remote_rig_port = QSpinBox()
         self.direwolf_remote_rig_port.setRange(1, 65535)
         self.direwolf_remote_rig_port.setValue(
             settings.direwolf_remote_rig_port
         )
+        self.direwolf_remote_rig_port.setToolTip(
+            "Port used by the remote rigctld for frequency and PTT control."
+        )
         form.addRow("Remote rigctld port", self.direwolf_remote_rig_port)
         self.direwolf_remote_note = QLabel(
-            "Used by the Auto-Calibrate Direwolf generator. The selected "
-            "Direwolf config is a local template; its ADEVICE must exist on "
-            "the remote host. The remote rigctld host must be reachable from "
-            "this machine. Stop any remote Direwolf instance before calibration."
+            "SSH control only; no SDR IQ. The local SDR must hear the remote "
+            "transmitter. The config is a local template; its ADEVICE must "
+            "exist remotely. Stop normal remote Direwolf first."
         )
         self.direwolf_remote_note.setWordWrap(True)
+        self.direwolf_remote_note.setMinimumHeight(48)
         self.direwolf_remote_note.setStyleSheet("color: #b7bcc2;")
+        self.direwolf_remote_note.setToolTip(_REMOTE_HELP_TEXT)
         form.addRow(self.direwolf_remote_note)
+        self.direwolf_remote_help_button = QPushButton(
+            "Remote requirements…"
+        )
+        self.direwolf_remote_help_button.setToolTip(
+            "Show SSH, remote PipeWire, rigctld, ADEVICE, RF, and PTT "
+            "requirements for remote Direwolf."
+        )
+        self.direwolf_remote_help_button.clicked.connect(self._show_remote_help)
+        form.addRow(self.direwolf_remote_help_button)
         self.direwolf_remote.toggled.connect(self._update_remote_fields)
 
         buttons = QDialogButtonBox(
@@ -760,6 +976,13 @@ class DeviceDialog(QDialog):
             self.direwolf_remote_note,
         ):
             widget.setEnabled(enabled)
+
+    def _show_remote_help(self) -> None:
+        QMessageBox.information(
+            self,
+            "Remote Direwolf requirements",
+            _REMOTE_HELP_TEXT,
+        )
 
     def settings(self) -> DeviceSettings:
         return DeviceSettings(
@@ -896,6 +1119,11 @@ class MainWindow(QMainWindow):
         self.profile_combo.addItem("Module17 / M17", "m17")
         self.profile_combo.addItem("MMDVM / DMR", "dmr")
         self.profile_combo.addItem("Generic FM", "generic-fm")
+        self.profile_combo.setToolTip(
+            "Select the waveform profile. The digital pane shows the nominal "
+            "outer-symbol reference for the selected profile; use Deviation "
+            "Ref… for all values."
+        )
         controls.addWidget(self.profile_combo)
         self.source_label_widget = QLabel("Source")
         controls.addWidget(self.source_label_widget)
@@ -1074,6 +1302,11 @@ class MainWindow(QMainWindow):
         self.direwolf_config_edit = QLineEdit()
         self.direwolf_config_edit.setPlaceholderText("path to direwolf.conf")
         self.direwolf_config_edit.setMinimumWidth(260)
+        self.direwolf_config_edit.setToolTip(
+            "Local Direwolf configuration. In remote mode this is a template: "
+            "its ADEVICE must exist on the remote host. Only ADEVICE, ARATE, "
+            "ACHANNELS, and MODEM are used."
+        )
         direwolf_layout.addWidget(self.direwolf_config_edit, 1)
         self.direwolf_browse_button = QPushButton("Browse…")
         direwolf_layout.addWidget(self.direwolf_browse_button)
@@ -1210,6 +1443,12 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.read_rig_button)
         self.link_rig = QCheckBox("Link Rig Frequency")
         bottom_layout.addWidget(self.link_rig)
+        self.reference_button = QPushButton("Deviation Ref…")
+        self.reference_button.setToolTip(
+            "Show nominal M17, DMR, and analog FM deviation references and "
+            "the Bessel absolute-null relationships."
+        )
+        bottom_layout.addWidget(self.reference_button)
         self.status_label = QLabel("Idle")
         self.status_label.setStyleSheet("border: none; color: #b7bcc2;")
         bottom_layout.addWidget(self.status_label, 1)
@@ -1253,6 +1492,7 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self._toggle_running)
         self.device_button.clicked.connect(self._edit_device)
         self.read_rig_button.clicked.connect(self._read_from_rig)
+        self.reference_button.clicked.connect(self._show_reference_dialog)
         self.frequency_edit.editingFinished.connect(self._commit_frequency)
 
     def _apply_style(self) -> None:
@@ -1319,6 +1559,9 @@ class MainWindow(QMainWindow):
     def _apply_responsive_fonts(self) -> None:
         scale = max(0.8, min(1.8, min(self.width() / 1280.0, self.height() / 720.0)))
         self._ui_scale = scale
+        if hasattr(self, "digital"):
+            self.digital.set_ui_scale(scale)
+            self.auto_digital.set_ui_scale(scale)
         control_font = self._scaled_font(14.0, scale)
         for widget in (
             self.mode_label,
@@ -1332,6 +1575,7 @@ class MainWindow(QMainWindow):
             self.device_button,
             self.start_button,
             self.read_rig_button,
+            self.reference_button,
             self.link_rig,
             self.frequency_label,
             self.units_label,
@@ -1533,6 +1777,7 @@ class MainWindow(QMainWindow):
             self._stop_tone()
             self._stop_ptt()
         self._update_bessel_control_state()
+        self._update_measurement_reference()
 
     def _update_bessel_control_state(self) -> None:
         bessel_running = (
@@ -1792,7 +2037,8 @@ class MainWindow(QMainWindow):
         )
         remote_note = (
             " Remote mode: the config file is a local template; its ADEVICE "
-            "must exist on the remote host, and remote Direwolf must be stopped."
+            "must exist on the remote host, and remote Direwolf must be stopped. "
+            f"{_REMOTE_HELP_TEXT}"
             if remote
             else ""
         )
@@ -1844,6 +2090,12 @@ class MainWindow(QMainWindow):
         )
         self.digital.set_bessel(self._bessel_progress)
         self.meter.set_value(None, "WAITING")
+        self.meter.set_reference_marks(
+            bessel_reference(
+                self._null_index(),
+                self._bessel_tone_hz(),
+            ).meter_marks
+        )
         if hasattr(self, "save_bessel_button"):
             self.save_bessel_button.setEnabled(False)
         if self._session is None:
@@ -2535,6 +2787,13 @@ class MainWindow(QMainWindow):
                 self._finish_auto_run()
 
     def _set_auto_meter_target(self, target_hz: float) -> None:
+        self.auto_meter.set_reference_marks(((target_hz, "TGT"),))
+        self.auto_meter.setToolTip(
+            f"Amber mark: target deviation {target_hz / 1000.0:.3f} kHz. "
+            f"{GENERIC_FM_REFERENCE.tooltip}"
+        )
+        if hasattr(self, "auto_digital"):
+            self.auto_digital.set_reference(GENERIC_FM_REFERENCE)
         for maximum in (3_000.0, 6_000.0, 10_000.0):
             if maximum >= target_hz * 1.5:
                 self.auto_meter.set_range_hz(maximum)
@@ -2542,6 +2801,14 @@ class MainWindow(QMainWindow):
         self.auto_meter.set_range_hz(10_000.0)
 
     def _set_auto_meter_range(self, tone_hz: float, null_index: int) -> None:
+        reference = bessel_reference(null_index, tone_hz)
+        self.auto_meter.set_reference_marks(reference.meter_marks)
+        self.auto_meter.setToolTip(
+            "Amber mark: selected Bessel null. "
+            f"{reference.summary}. {BESSEL_REFERENCE_DETAIL}"
+        )
+        if hasattr(self, "auto_digital"):
+            self.auto_digital.set_reference(reference, prefix="ABSOLUTE REF")
         target = carrier_null_index(null_index) * tone_hz
         for maximum in (3_000.0, 6_000.0, 10_000.0):
             if maximum >= target * 1.05:
@@ -2903,9 +3170,45 @@ class MainWindow(QMainWindow):
             f"{offset}{depth} · {progress.state}"
         )
 
+    def _reference_profile_id(self) -> str:
+        profile_id = str(self.profile_combo.currentData())
+        return {
+            "m17": "module17-m17",
+            "dmr": "mmdvm-dmr",
+        }.get(profile_id, profile_id)
+
+    def _update_measurement_reference(self) -> None:
+        if not hasattr(self, "digital"):
+            return
+        if self._is_bessel_mode():
+            reference = bessel_reference(
+                self._null_index(),
+                self._bessel_tone_hz(),
+            )
+            self.digital.set_reference(reference, prefix="ABSOLUTE REF")
+            self.meter.set_reference_marks(reference.meter_marks)
+            self.meter.setToolTip(
+                "Amber mark: selected Bessel null. "
+                f"{reference.summary}. {BESSEL_REFERENCE_DETAIL}"
+            )
+            return
+        reference = reference_for_profile(self._reference_profile_id())
+        self.digital.set_reference(reference)
+        self.meter.set_reference_marks(
+            reference.meter_marks if reference is not None else ()
+        )
+        self.meter.setToolTip(
+            (
+                f"Amber marks: {reference.summary}. {reference.detail}"
+                if reference is not None
+                else ""
+            )
+        )
+
     def _on_profile_changed(self) -> None:
         if self._auto_running:
             self._cancel_auto_calibration("cancelled by profile change")
+        self._update_measurement_reference()
         if self._session is not None and self._session.running:
             self.start_measurement()
 
@@ -2919,6 +3222,10 @@ class MainWindow(QMainWindow):
 
     def _on_range_changed(self) -> None:
         self.meter.set_range_hz(float(self.range_combo.currentData()))
+
+    def _show_reference_dialog(self) -> None:
+        dialog = DeviationReferenceDialog(self)
+        dialog.exec()
 
     def _edit_device(self) -> None:
         if self._auto_running:
@@ -3019,6 +3326,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Frequency error: {exc}")
             return
         profile_name = str(self.profile_combo.currentData())
+        reference_profile_id = self._reference_profile_id()
         mode = "bessel" if self._is_bessel_mode() else "digital"
         simulator = self.source_combo.currentData() == SOURCE_SIMULATOR
         try:
@@ -3043,7 +3351,11 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Start failed: {exc}")
             self.start_button.setText("Start")
             self.meter.set_value(None, "ERROR")
-            self.digital.set_measurement(None, source_label=self._source_label)
+            self.digital.set_measurement(
+                None,
+                source_label=self._source_label,
+                profile_id=reference_profile_id,
+            )
             return
 
         self._session = session
@@ -3061,7 +3373,11 @@ class MainWindow(QMainWindow):
                 "Bessel: waiting for carrier; remove modulation if needed"
             )
         else:
-            self.digital.set_measurement(None, source_label=self._source_label)
+            self.digital.set_measurement(
+                None,
+                source_label=self._source_label,
+                profile_id=reference_profile_id,
+            )
             self.status_label.setText(f"Starting {profile_name.upper()} measurement")
         self.meter.set_value(None, "STARTING")
         self._poll_timer.start()

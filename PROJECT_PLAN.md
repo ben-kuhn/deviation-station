@@ -673,6 +673,10 @@ The overlay README will list the package, its purpose, and the installation attr
 - Add discriminator gating, center correction, robust-peak estimation, averaging, and peak hold.
 - Add initial MMDVM-mode and Module17/M17 digital profiles.
 - Build the two-tab shell, white-on-dark meter, digital pane, waterfall, and shared frequency/rig-synchronization bar.
+- Add profile-aware nominal deviation references and a reference dialog.
+  **Status:** Implemented. The digital pane and amber meter marks show the
+  active profile reference; the bottom-bar dialog lists M17, DMR, analog FM,
+  and Bessel relationships.
 - Validate both engines in simulation and the complete layout at 1280×720 and 1920×1080.
 
 ### Phase 4 — Capture-backed MMDVM/DMR and M17 validation

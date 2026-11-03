@@ -7,7 +7,12 @@ import pytest  # noqa: E402
 from PyQt6.QtCore import QSettings  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from deviation_meter.ui import MainWindow  # noqa: E402
+from deviation_meter.ui import (  # noqa: E402
+    DeviceDialog,
+    DeviceSettings,
+    DeviationReferenceDialog,
+    MainWindow,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -174,6 +179,67 @@ def test_remote_direwolf_ptt_wrappers() -> None:
         assert events == [("start", 0.0), "stop"]
     finally:
         window.close()
+        app.processEvents()
+
+
+def test_measurement_pane_shows_profile_reference() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("m17")
+        )
+        app.processEvents()
+        assert "Module17 / M17" in window.digital.reference_label.text()
+        assert "2.400 kHz outer" in window.digital.reference_label.text()
+        assert window.meter._reference_marks == [(2400.0, "2.4k")]
+
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("generic-fm")
+        )
+        app.processEvents()
+        assert "Generic FM" in window.digital.reference_label.text()
+        assert "2.5 kHz NB" in window.digital.reference_label.text()
+        assert window.meter._reference_marks == [
+            (2500.0, "NB 2.5"),
+            (5000.0, "WB 5.0"),
+        ]
+
+        window.mode_combo.setCurrentIndex(window.mode_combo.findData("bessel"))
+        app.processEvents()
+        assert "Bessel J0 null" in window.digital.reference_label.text()
+        assert window.meter._reference_marks[0][1] == "J0"
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_remote_and_reference_help_is_self_documented() -> None:
+    app = QApplication.instance() or QApplication([])
+    dialog = DeviceDialog(
+        DeviceSettings(
+            direwolf_remote=True,
+            direwolf_ssh_host="bench-pi",
+            direwolf_remote_rig_host="station.local",
+        )
+    )
+    try:
+        assert "BatchMode" in dialog.direwolf_ssh_host.toolTip()
+        assert "127.0.0.1" in dialog.direwolf_remote_rig_host.toolTip()
+        assert "no SDR IQ" in dialog.direwolf_remote_note.text()
+        assert "SSH forwarding" in dialog.direwolf_remote_note.toolTip()
+        assert dialog.direwolf_remote_help_button.text() == (
+            "Remote requirements…"
+        )
+    finally:
+        dialog.close()
+
+    reference_dialog = DeviationReferenceDialog()
+    try:
+        assert reference_dialog.minimumWidth() >= 620
+        assert reference_dialog.windowTitle() == "Deviation references"
+    finally:
+        reference_dialog.close()
         app.processEvents()
 
 
