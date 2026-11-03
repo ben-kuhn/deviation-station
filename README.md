@@ -41,6 +41,8 @@ The measurement and internal-generator calibration foundation is implemented:
   final capture using the internal tone generator, a Direwolf steady tone, or
   xara TUNE
 - Bounded PipeWire stream-volume control for the Direwolf calibration process
+- SSH remote-Direwolf calibration using remote PipeWire volume control and a
+  remote `rigctld` PTT endpoint
 - xara command-port control for its 1500 Hz ALC test tone
 - Discriminator target-deviation control using the Generic FM profile
 - Hardware-free Bessel and target calibration rehearsals with the Simulator source
@@ -51,8 +53,8 @@ The measurement and internal-generator calibration foundation is implemented:
 - Network `rigctld` frequency read/write from the shared bottom bar
 
 The Auto-Calibrate tab supports the internal tone generator, Direwolf steady
-mark/space tones, and xara TUNE. VARA and QTSoundModem adapters are not
-implemented yet.
+mark/space tones (local or remote over SSH), and xara TUNE. VARA and
+QTSoundModem adapters are not implemented yet.
 
 ## Development on NixOS
 
@@ -219,6 +221,65 @@ Direwolf instance before starting a calibration run. The adapter refuses to
 start if another Direwolf process is present, and it restores PTT off when the
 calibration process is stopped.
 
+#### Remote Direwolf over SSH
+
+The local application can run Direwolf on a remote host while keeping the SDR
+and receiver local. This uses only SSH control and remote audio-volume
+commands; it does **not** carry SDR IQ over the network. The receiver still has
+to hear the remote transmitter over RF.
+
+On the remote host, install Direwolf, PipeWire, `pw-dump`, `wpctl`, `timeout`,
+and `pgrep`. Configure key-based SSH access and confirm it works
+non-interactively:
+
+```bash
+ssh -o BatchMode=yes remote-host true
+```
+
+In **SDR / Rig…**:
+
+1. Enable **Run Direwolf on a remote host via SSH**.
+2. Enter the SSH host or `~/.ssh/config` alias.
+3. Enter the remote `rigctld` host and port.
+
+The remote `rigctld` host must be reachable from both this machine and the
+remote host. Do not use `127.0.0.1` unless both the application and `rigctld`
+run on the same machine. The local `rigctld` fields continue to control the
+manual tone/PTT path and the internal/xara generators.
+
+Select a Direwolf configuration file in Auto-Calibrate as usual. In remote
+mode that file is a **local template**: the application reads its `ADEVICE`,
+`ARATE`, `ACHANNELS`, and `MODEM` settings, then uploads a generated temporary
+configuration to the remote host. The `ADEVICE` name must exist on the remote
+host. Stop any normal remote Direwolf instance before starting.
+
+The remote adapter:
+
+- starts `direwolf -x` in a private remote temporary directory,
+- discovers the remote Direwolf PipeWire playback stream and controls only its
+  volume,
+- uses remote `rigctld` for Direwolf PTT and verifies PTT state over the network,
+- sets a remote `timeout` watchdog that includes the PTT safety timeout plus
+  the stream-startup margin, so the remote transmitter unkeys even if the SSH
+  connection or local application disappears,
+- removes the temporary remote files and confirms PTT off on completion.
+
+The application queries the remote rig frequency/mode and uses it for the
+preflight check when the remote Direwolf generator is selected. While that
+generator is selected, **Read from Rig** and **Link Rig Frequency** also use
+the remote rig endpoint; the local rig fields remain in use for manual and
+internal/xara calibration. Remote calibration requires the same FM-mode and
+frequency-match rules as local calibration.
+
+If startup fails, check non-interactive SSH, the remote `PATH` for
+`direwolf`/`pw-dump`/`wpctl`, the remote `XDG_RUNTIME_DIR`/PipeWire session, and
+whether another remote Direwolf process is still running.
+
+The SSH transport and remote process lifecycle are unit-tested with a simulated
+remote host. A real remote-site test still needs to confirm RF reception, remote
+audio routing, PTT readback, and the remote timeout watchdog with the actual
+station.
+
 For **xara TUNE**, start xara separately with radio mode and `rigctld` PTT,
 for example:
 
@@ -363,6 +424,8 @@ src/deviation_meter/
   direwolf.py       Temporary Direwolf calibration-tone process
   discriminator.py  Instantaneous-frequency measurements
   pipewire.py       PipeWire stream discovery and bounded volume control
+  remote_direwolf.py SSH-controlled remote Direwolf calibration source
+  ssh.py             Quoted SSH command transport with connection reuse
   gr_live.py        GNU Radio streaming receive and measurement flowgraph
   live.py           Shared live-measurement snapshot types
   measurement.py    Common reading and quality types

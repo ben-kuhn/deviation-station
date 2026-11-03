@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Auto-Calibrate
+
+- Added remote Direwolf calibration over SSH. The local application starts a
+  temporary remote `direwolf -x` process, controls only its remote PipeWire
+  stream volume, uses a remote `rigctld` endpoint for PTT, and enforces a
+  remote timeout watchdog in addition to the local PTT safety timer.
+- Remote mode uses the selected Direwolf configuration as a local template;
+  the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
+  `pw-dump`, and `wpctl`.
+
+### Fixed
+
+- Boolean application settings are parsed explicitly, so a stored `false`
+  cannot be mistaken for an enabled option.
+
 ## 0.1.0 — 2026-10-31
 
 Initial release.

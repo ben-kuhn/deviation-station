@@ -7,6 +7,7 @@
   libpulseaudio,
   soapysdr,
   soapyrtlsdr,
+  openssh,
   gsettings-desktop-schemas,
   gtk3,
   adwaita-icon-theme,
@@ -64,6 +65,7 @@ stdenv.mkDerivation {
     qt6.qtbase
     qt6.qtmultimedia
     libpulseaudio
+    openssh
     gsettings-desktop-schemas
     gtk3
     adwaita-icon-theme
@@ -94,6 +96,7 @@ stdenv.mkDerivation {
       --add-flags "-m deviation_meter" \
       --prefix PYTHONPATH : "${sitePackages}" \
       --prefix SOAPY_SDR_PLUGIN_PATH : "${soapyPluginPath}" \
+      --prefix PATH : "${openssh}/bin" \
       --prefix LD_LIBRARY_PATH : "${lib.makeLibraryPath [ libpulseaudio ]}" \
       --prefix GSETTINGS_SCHEMA_DIR : "${settingsSchemaPath}" \
       --prefix GSETTINGS_SCHEMAS_PATH : "${settingsSchemaPath}" \

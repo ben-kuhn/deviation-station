@@ -79,7 +79,9 @@ from .rehearsal import (
     RehearsalIO,
     TargetRehearsalPlant,
 )
+from .remote_direwolf import RemoteDirewolfCalibration, RemoteDirewolfConfig
 from .rigctl import RigctldClient, RigctldError
+from .ssh import SshError
 from .target_cal import (
     TargetCalConfig,
     TargetCalController,
@@ -101,6 +103,16 @@ SOURCE_SIMULATOR = "simulator"
 SOURCE_LIVE = "live"
 
 
+def _settings_bool(value: object, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 @dataclass(slots=True)
 class DeviceSettings:
     device_args: str = "driver=rtlsdr"
@@ -113,6 +125,10 @@ class DeviceSettings:
     ptt_timeout_s: float = 20.0
     rig_host: str = "127.0.0.1"
     rig_port: int = 4532
+    direwolf_remote: bool = False
+    direwolf_ssh_host: str = ""
+    direwolf_remote_rig_host: str = ""
+    direwolf_remote_rig_port: int = 4532
 
 
 class _AutoCalHardware:
@@ -153,6 +169,33 @@ class _DirewolfAutoCalHardware:
 
     def unkey_ptt(self) -> bool:
         return self._window._unkey_direwolf_calibration(self._adapter)
+
+    def start_tone(self, level: float) -> None:
+        self._adapter.set_level(level)
+
+    def stop_tone(self) -> None:
+        self._adapter.set_level(0.0)
+
+    def set_level(self, level: float) -> None:
+        self._adapter.set_level(level)
+
+
+class _RemoteDirewolfAutoCalHardware:
+    """Expose a remote SSH-controlled Direwolf process as the audio source."""
+
+    def __init__(
+        self,
+        window: "MainWindow",
+        adapter: RemoteDirewolfCalibration,
+    ) -> None:
+        self._window = window
+        self._adapter = adapter
+
+    def key_ptt(self) -> bool:
+        return self._window._key_remote_direwolf_calibration(self._adapter)
+
+    def unkey_ptt(self) -> bool:
+        return self._window._unkey_remote_direwolf_calibration(self._adapter)
 
     def start_tone(self, level: float) -> None:
         self._adapter.set_level(level)
@@ -668,6 +711,37 @@ class DeviceDialog(QDialog):
         self.rig_port.setRange(1, 65535)
         self.rig_port.setValue(settings.rig_port)
         form.addRow("rigctld port", self.rig_port)
+        self.direwolf_remote = QCheckBox(
+            "Run Direwolf on a remote host via SSH"
+        )
+        self.direwolf_remote.setChecked(settings.direwolf_remote)
+        form.addRow("Remote Direwolf", self.direwolf_remote)
+        self.direwolf_ssh_host = QLineEdit(settings.direwolf_ssh_host)
+        self.direwolf_ssh_host.setPlaceholderText("SSH host or ~/.ssh/config alias")
+        form.addRow("SSH host", self.direwolf_ssh_host)
+        self.direwolf_remote_rig_host = QLineEdit(
+            settings.direwolf_remote_rig_host
+        )
+        self.direwolf_remote_rig_host.setPlaceholderText(
+            "rigctld host reachable from this machine and the remote host"
+        )
+        form.addRow("Remote rigctld host", self.direwolf_remote_rig_host)
+        self.direwolf_remote_rig_port = QSpinBox()
+        self.direwolf_remote_rig_port.setRange(1, 65535)
+        self.direwolf_remote_rig_port.setValue(
+            settings.direwolf_remote_rig_port
+        )
+        form.addRow("Remote rigctld port", self.direwolf_remote_rig_port)
+        self.direwolf_remote_note = QLabel(
+            "Used by the Auto-Calibrate Direwolf generator. The selected "
+            "Direwolf config is a local template; its ADEVICE must exist on "
+            "the remote host. The remote rigctld host must be reachable from "
+            "this machine. Stop any remote Direwolf instance before calibration."
+        )
+        self.direwolf_remote_note.setWordWrap(True)
+        self.direwolf_remote_note.setStyleSheet("color: #b7bcc2;")
+        form.addRow(self.direwolf_remote_note)
+        self.direwolf_remote.toggled.connect(self._update_remote_fields)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -676,6 +750,16 @@ class DeviceDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+        self._update_remote_fields(self.direwolf_remote.isChecked())
+
+    def _update_remote_fields(self, enabled: bool) -> None:
+        for widget in (
+            self.direwolf_ssh_host,
+            self.direwolf_remote_rig_host,
+            self.direwolf_remote_rig_port,
+            self.direwolf_remote_note,
+        ):
+            widget.setEnabled(enabled)
 
     def settings(self) -> DeviceSettings:
         return DeviceSettings(
@@ -689,6 +773,12 @@ class DeviceDialog(QDialog):
             ptt_timeout_s=self.ptt_timeout.value(),
             rig_host=self.rig_host.text().strip() or "127.0.0.1",
             rig_port=self.rig_port.value(),
+            direwolf_remote=self.direwolf_remote.isChecked(),
+            direwolf_ssh_host=self.direwolf_ssh_host.text().strip(),
+            direwolf_remote_rig_host=(
+                self.direwolf_remote_rig_host.text().strip()
+            ),
+            direwolf_remote_rig_port=self.direwolf_remote_rig_port.value(),
         )
 
 
@@ -720,6 +810,9 @@ class MainWindow(QMainWindow):
         self._rehearsal_plant = None
         self._rehearsal_io: RehearsalIO | None = None
         self._direwolf_calibration: DirewolfCalibration | None = None
+        self._remote_direwolf_calibration: (
+            RemoteDirewolfCalibration | None
+        ) = None
         self._direwolf_profile: DirewolfProfile | None = None
         self._direwolf_profile_error: str | None = None
         self._xara_calibration: XaraCalibration | None = None
@@ -762,6 +855,16 @@ class MainWindow(QMainWindow):
             ptt_timeout_s=float(store.value("ptt_timeout_s", 20.0)),
             rig_host=str(store.value("rig_host", "127.0.0.1")),
             rig_port=int(store.value("rig_port", 4532)),
+            direwolf_remote=_settings_bool(
+                store.value("direwolf_remote", False)
+            ),
+            direwolf_ssh_host=str(store.value("direwolf_ssh_host", "")),
+            direwolf_remote_rig_host=str(
+                store.value("direwolf_remote_rig_host", "")
+            ),
+            direwolf_remote_rig_port=int(
+                store.value("direwolf_remote_rig_port", 4532)
+            ),
         )
 
     def _build_ui(self) -> None:
@@ -1350,7 +1453,7 @@ class MainWindow(QMainWindow):
         frequency = float(store.value("frequency_mhz", 443.457))
         self.frequency_edit.setText(f"{frequency:.6f}")
         self._frequency_hz = frequency * 1e6
-        self.link_rig.setChecked(bool(store.value("link_rig", False)))
+        self.link_rig.setChecked(_settings_bool(store.value("link_rig", False)))
         self.meter.set_range_hz(float(self.range_combo.currentData()))
         self._update_mode_controls()
         self._on_auto_generator_changed()
@@ -1396,6 +1499,16 @@ class MainWindow(QMainWindow):
         store.setValue("ptt_timeout_s", self._device.ptt_timeout_s)
         store.setValue("rig_host", self._device.rig_host)
         store.setValue("rig_port", self._device.rig_port)
+        store.setValue("direwolf_remote", self._device.direwolf_remote)
+        store.setValue("direwolf_ssh_host", self._device.direwolf_ssh_host)
+        store.setValue(
+            "direwolf_remote_rig_host",
+            self._device.direwolf_remote_rig_host,
+        )
+        store.setValue(
+            "direwolf_remote_rig_port",
+            self._device.direwolf_remote_rig_port,
+        )
 
     def _is_bessel_mode(self) -> bool:
         return self.mode_combo.currentData() == "bessel"
@@ -1463,6 +1576,11 @@ class MainWindow(QMainWindow):
                 self._direwolf_profile is not None
                 and self._direwolf_profile_error is None
             )
+            if self._device.direwolf_remote:
+                generator_ready = generator_ready and bool(
+                    self._device.direwolf_ssh_host.strip()
+                    and self._device.direwolf_remote_rig_host.strip()
+                )
         elif generator == "xara":
             generator_ready = bool(self.xara_host_edit.text().strip())
         self.auto_start_button.setEnabled(
@@ -1642,15 +1760,47 @@ class MainWindow(QMainWindow):
             tone_hz,
             int(self.auto_null_combo.currentData()),
         )
+        remote = self._device.direwolf_remote
+        remote_host = self._device.direwolf_ssh_host.strip()
+        if remote and not remote_host:
+            self._direwolf_profile_error = (
+                "configure the remote Direwolf SSH host in SDR / Rig"
+            )
+            self.direwolf_info_label.setStyleSheet("color: #ffbf47;")
+            self.direwolf_info_label.setText(
+                "Remote Direwolf is enabled but the SSH host is empty"
+            )
+            self._update_auto_control_state()
+            return
+        if remote and not self._device.direwolf_remote_rig_host.strip():
+            self._direwolf_profile_error = (
+                "configure the remote rigctld host in SDR / Rig"
+            )
+            self.direwolf_info_label.setStyleSheet("color: #ffbf47;")
+            self.direwolf_info_label.setText(
+                "Remote Direwolf is enabled but the rigctld host is empty"
+            )
+            self._update_auto_control_state()
+            return
         self.direwolf_info_label.setStyleSheet("color: #b7bcc2;")
+        if remote:
+            self.direwolf_info_label.setStyleSheet("color: #ffbf47;")
+        prefix = f"REMOTE {remote_host} · " if remote else ""
         self.direwolf_info_label.setText(
-            f"{profile.baud} bd · {tone} {tone_hz / 1e3:.3g} kHz · "
+            f"{prefix}{profile.baud} bd · {tone} {tone_hz / 1e3:.3g} kHz · "
             f"{profile.audio_device}"
+        )
+        remote_note = (
+            " Remote mode: the config file is a local template; its ADEVICE "
+            "must exist on the remote host, and remote Direwolf must be stopped."
+            if remote
+            else ""
         )
         self.direwolf_info_label.setToolTip(
             f"Mark {profile.mark_hz:g} Hz, space {profile.space_hz:g} Hz. "
             f"Calibration will use {tone_hz:g} Hz and temporary ADEVICE "
             f"{profile.audio_device}. Stop any running Direwolf first."
+            f"{remote_note}"
         )
         self._update_auto_control_state()
 
@@ -1867,6 +2017,10 @@ class MainWindow(QMainWindow):
                 "bandwidth_hz": self._device.bandwidth_hz,
                 "rig_host": self._device.rig_host,
                 "rig_port": self._device.rig_port,
+                "direwolf_remote": self._device.direwolf_remote,
+                "direwolf_ssh_host": self._device.direwolf_ssh_host,
+                "remote_rig_host": self._device.direwolf_remote_rig_host,
+                "remote_rig_port": self._device.direwolf_remote_rig_port,
             },
             audio_output=(
                 self._device.audio_output or TonePlayer.default_output_name()
@@ -1919,6 +2073,10 @@ class MainWindow(QMainWindow):
                     "bandwidth_hz": self._device.bandwidth_hz,
                     "rig_host": self._device.rig_host,
                     "rig_port": self._device.rig_port,
+                    "direwolf_remote": self._device.direwolf_remote,
+                    "direwolf_ssh_host": self._device.direwolf_ssh_host,
+                    "remote_rig_host": self._device.direwolf_remote_rig_host,
+                    "remote_rig_port": self._device.direwolf_remote_rig_port,
                 },
                 source=self._auto_run_generator,
                 audio_output=(
@@ -1991,7 +2149,11 @@ class MainWindow(QMainWindow):
                 "Cannot start auto-calibration while PTT cannot be released"
             )
             return
-        frequency = self._prepare_auto_frequency()
+        generator = str(self.auto_generator_combo.currentData())
+        remote_direwolf = (
+            self._device.direwolf_remote and generator == "direwolf"
+        )
+        frequency = self._prepare_auto_frequency(remote=remote_direwolf)
         if frequency is None:
             return
         self._frequency_hz = frequency
@@ -2007,7 +2169,6 @@ class MainWindow(QMainWindow):
             5.0,
             min(18.0, self._device.ptt_timeout_s - 2.0),
         )
-        generator = str(self.auto_generator_combo.currentData())
         self._auto_run_generator = generator
         prepared = self._prepare_auto_io(generator, method)
         if prepared is None:
@@ -2126,6 +2287,7 @@ class MainWindow(QMainWindow):
             else "Bessel carrier null"
         )
         self._direwolf_calibration = None
+        self._remote_direwolf_calibration = None
         self._xara_calibration = None
         if generator == "direwolf":
             profile = self._direwolf_profile
@@ -2141,6 +2303,57 @@ class MainWindow(QMainWindow):
             except DirewolfError as exc:
                 self.status_label.setText(str(exc))
                 return None
+            if self._device.direwolf_remote:
+                ssh_host = self._device.direwolf_ssh_host.strip()
+                remote_rig_host = (
+                    self._device.direwolf_remote_rig_host.strip()
+                )
+                if not ssh_host:
+                    self.status_label.setText(
+                        "Configure the remote Direwolf SSH host in SDR / Rig"
+                    )
+                    return None
+                if not remote_rig_host:
+                    self.status_label.setText(
+                        "Configure the remote rigctld host in SDR / Rig"
+                    )
+                    return None
+                try:
+                    adapter = RemoteDirewolfCalibration(
+                        RemoteDirewolfConfig(
+                            ssh_host=ssh_host,
+                            base_config=Path(
+                                self.direwolf_config_edit.text().strip()
+                            ),
+                            tone=tone,
+                            remote_rig_host=remote_rig_host,
+                            remote_rig_port=(
+                                self._device.direwolf_remote_rig_port
+                            ),
+                            max_duration_s=max(
+                                5.0,
+                                min(35.0, self._device.ptt_timeout_s + 3.0),
+                            ),
+                        )
+                    )
+                except (DirewolfError, SshError) as exc:
+                    self.status_label.setText(
+                        f"Remote Direwolf settings: {exc}"
+                    )
+                    return None
+                self._remote_direwolf_calibration = adapter
+                notes = (
+                    f"Auto-calibrated {purpose} via remote Direwolf "
+                    f"{profile.baud} baud {tone} tone {tone_hz:g} Hz on "
+                    f"{ssh_host}; ADEVICE {profile.audio_device}; "
+                    f"remote PTT {remote_rig_host}:"
+                    f"{self._device.direwolf_remote_rig_port}"
+                )
+                return (
+                    tone_hz,
+                    _RemoteDirewolfAutoCalHardware(self, adapter),
+                    notes,
+                )
             adapter = DirewolfCalibration(
                 DirewolfConfig(
                     base_config=Path(self.direwolf_config_edit.text().strip()),
@@ -2336,13 +2549,25 @@ class MainWindow(QMainWindow):
                 return
         self.auto_meter.set_range_hz(10_000.0)
 
-    def _prepare_auto_frequency(self) -> float | None:
+    def _prepare_auto_frequency(self, *, remote: bool = False) -> float | None:
         try:
             requested = self._desired_frequency_hz()
         except ValueError as exc:
             self.status_label.setText(f"Frequency error: {exc}")
             return None
-        client = RigctldClient(self._device.rig_host, self._device.rig_port)
+        if remote:
+            rig_host = self._device.direwolf_remote_rig_host.strip()
+            rig_port = self._device.direwolf_remote_rig_port
+            if not rig_host:
+                self.status_label.setText(
+                    "Configure the remote rigctld host in SDR / Rig before "
+                    "remote Direwolf calibration"
+                )
+                return None
+        else:
+            rig_host = self._device.rig_host
+            rig_port = self._device.rig_port
+        client = RigctldClient(rig_host, rig_port)
         try:
             mode, _ = client.get_mode()
             if mode not in {"FM", "FMN", "PKT"}:
@@ -2361,7 +2586,8 @@ class MainWindow(QMainWindow):
                     )
                     return None
         except RigctldError as exc:
-            self.status_label.setText(f"Rig preflight check failed: {exc}")
+            label = "Remote rig" if remote else "Rig"
+            self.status_label.setText(f"{label} preflight check failed: {exc}")
             return None
         self.frequency_edit.setText(f"{requested / 1e6:.6f}")
         return requested
@@ -2389,6 +2615,40 @@ class MainWindow(QMainWindow):
             )
             return False
         return confirmed
+
+    def _key_remote_direwolf_calibration(
+        self,
+        adapter: RemoteDirewolfCalibration,
+    ) -> bool:
+        adapter.start(0.0)
+        self._ptt_keyed = True
+        self._ptt_timer.start(int(round(self._device.ptt_timeout_s * 1000.0)))
+        self.status_label.setText(
+            "Remote Direwolf calibration PTT ON — automatic unkey in "
+            f"{self._device.ptt_timeout_s:.0f} s"
+        )
+        return True
+
+    def _unkey_remote_direwolf_calibration(
+        self,
+        adapter: RemoteDirewolfCalibration,
+    ) -> bool:
+        cleanup_error: str | None = None
+        try:
+            adapter.stop()
+        except (DirewolfError, OSError, RuntimeError, SshError) as exc:
+            cleanup_error = str(exc)
+        self._ptt_timer.stop()
+        self._ptt_keyed = False
+        if self._remote_direwolf_calibration is adapter:
+            self._remote_direwolf_calibration = None
+        if cleanup_error is not None:
+            self.status_label.setText(
+                f"Remote Direwolf cleanup failed: {cleanup_error}"
+            )
+            return False
+        self.status_label.setText("Remote Direwolf PTT OFF")
+        return True
 
     def _key_xara_calibration(self, adapter: XaraCalibration) -> bool:
         adapter.start(0.0)
@@ -2445,6 +2705,22 @@ class MainWindow(QMainWindow):
                 adapter.stop()
             except (DirewolfError, OSError, RuntimeError) as exc:
                 self.status_label.setText(f"Direwolf cleanup failed: {exc}")
+            self._ptt_timer.stop()
+            self._ptt_keyed = False
+        remote_adapter = self._remote_direwolf_calibration
+        self._remote_direwolf_calibration = None
+        if remote_adapter is not None:
+            try:
+                remote_adapter.stop()
+            except (
+                DirewolfError,
+                OSError,
+                RuntimeError,
+                SshError,
+            ) as exc:
+                self.status_label.setText(
+                    f"Remote Direwolf cleanup failed: {exc}"
+                )
             self._ptt_timer.stop()
             self._ptt_keyed = False
         xara = self._xara_calibration
@@ -2651,6 +2927,8 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._device = dialog.settings()
             self.status_label.setText("SDR settings updated")
+            if self.auto_generator_combo.currentData() == "direwolf":
+                self._refresh_direwolf_info()
             if self.source_combo.currentData() == SOURCE_LIVE:
                 self.start_measurement()
 
@@ -2663,6 +2941,19 @@ class MainWindow(QMainWindow):
             raise ValueError("receive frequency must be between 0.1 and 6000 MHz")
         return frequency_mhz * 1e6
 
+    def _selected_rig_endpoint(self) -> tuple[str, int, bool]:
+        if (
+            self._device.direwolf_remote
+            and self.auto_generator_combo.currentData() == "direwolf"
+            and self._device.direwolf_remote_rig_host.strip()
+        ):
+            return (
+                self._device.direwolf_remote_rig_host.strip(),
+                self._device.direwolf_remote_rig_port,
+                True,
+            )
+        return self._device.rig_host, self._device.rig_port, False
+
     def _commit_frequency(self) -> None:
         if self._auto_running:
             self._cancel_auto_calibration("cancelled by frequency change")
@@ -2672,13 +2963,15 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"Frequency error: {exc}")
             return
         if self.link_rig.isChecked():
+            rig_host, rig_port, remote = self._selected_rig_endpoint()
             try:
                 confirmed = RigctldClient(
-                    self._device.rig_host,
-                    self._device.rig_port,
+                    rig_host,
+                    rig_port,
                 ).set_frequency(int(round(requested)))
             except RigctldError as exc:
-                self.status_label.setText(str(exc))
+                label = "Remote rig" if remote else "Rig"
+                self.status_label.setText(f"{label}: {exc}")
                 return
             requested = float(confirmed)
             self.frequency_edit.setText(f"{requested / 1e6:.6f}")
@@ -2693,18 +2986,18 @@ class MainWindow(QMainWindow):
     def _read_from_rig(self) -> None:
         if self._auto_running:
             self._cancel_auto_calibration("cancelled by frequency change")
+        rig_host, rig_port, remote = self._selected_rig_endpoint()
         try:
-            frequency = RigctldClient(
-                self._device.rig_host,
-                self._device.rig_port,
-            ).get_frequency()
+            frequency = RigctldClient(rig_host, rig_port).get_frequency()
         except RigctldError as exc:
-            self.status_label.setText(str(exc))
+            label = "Remote rig" if remote else "rigctld"
+            self.status_label.setText(f"{label}: {exc}")
             return
         self.frequency_edit.setText(f"{frequency / 1e6:.6f}")
         self._frequency_hz = float(frequency)
+        source = "remote rigctld" if remote else "rigctld"
         self.status_label.setText(
-            f"Read {frequency / 1e6:.6f} MHz from rigctld"
+            f"Read {frequency / 1e6:.6f} MHz from {source}"
         )
         if self._session is not None and self._session.running:
             self.start_measurement()

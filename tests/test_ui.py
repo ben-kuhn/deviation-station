@@ -1,10 +1,22 @@
 import os
+from dataclasses import replace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pytest  # noqa: E402
+from PyQt6.QtCore import QSettings  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from deviation_meter.ui import MainWindow  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _isolate_qsettings(tmp_path):
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        str(tmp_path / "config"),
+    )
 
 
 def test_unkey_ptt_treats_false_readback_as_success(monkeypatch) -> None:
@@ -39,6 +51,8 @@ def test_auto_tab_switches_to_direwolf_source(tmp_path) -> None:
     original_path = window.direwolf_config_edit.text()
     original_tone = window.direwolf_tone_combo.currentData()
     original_source = window.source_combo.currentData()
+    original_remote = window._device.direwolf_remote
+    window._device.direwolf_remote = False
     try:
         window.source_combo.setCurrentIndex(window.source_combo.findData("live"))
         window.auto_generator_combo.setCurrentIndex(
@@ -69,6 +83,96 @@ def test_auto_tab_switches_to_direwolf_source(tmp_path) -> None:
         window.source_combo.setCurrentIndex(
             window.source_combo.findData(original_source)
         )
+        window._device.direwolf_remote = original_remote
+        window.close()
+        app.processEvents()
+
+
+def test_remote_direwolf_requires_ssh_and_remote_rig(tmp_path) -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    original_generator = window.auto_generator_combo.currentData()
+    original_source = window.source_combo.currentData()
+    original_path = window.direwolf_config_edit.text()
+    original_device = replace(window._device)
+    try:
+        config = tmp_path / "direwolf.conf"
+        config.write_text(
+            "ADEVICE digirig-remote\nACHANNELS 1\nMODEM 1200\n",
+            encoding="utf-8",
+        )
+        window.source_combo.setCurrentIndex(window.source_combo.findData("live"))
+        window.auto_generator_combo.setCurrentIndex(
+            window.auto_generator_combo.findData("direwolf")
+        )
+        window.direwolf_config_edit.setText(str(config))
+        window._device.direwolf_remote = True
+        window._device.direwolf_ssh_host = ""
+        window._device.direwolf_remote_rig_host = ""
+        window._refresh_direwolf_info()
+        assert window._direwolf_profile_error is not None
+        assert "SSH host" in window._direwolf_profile_error
+        assert window.auto_start_button.isEnabled() is False
+
+        window._device.direwolf_ssh_host = "bench-pi"
+        window._device.direwolf_remote_rig_host = "station.local"
+        window._refresh_direwolf_info()
+        assert window._direwolf_profile_error is None
+        assert "REMOTE bench-pi" in window.direwolf_info_label.text()
+        assert window.auto_start_button.isEnabled() is True
+        assert window._selected_rig_endpoint() == (
+            "station.local",
+            4532,
+            True,
+        )
+        prepared = window._prepare_auto_io("direwolf", "bessel")
+        assert prepared is not None
+        adapter = window._remote_direwolf_calibration
+        assert adapter is not None
+        assert adapter.config.remote_rig_host == "station.local"
+        assert adapter.config.max_duration_s == 23.0
+        window._remote_direwolf_calibration = None
+    finally:
+        window.auto_generator_combo.setCurrentIndex(
+            window.auto_generator_combo.findData(original_generator)
+        )
+        window.source_combo.setCurrentIndex(
+            window.source_combo.findData(original_source)
+        )
+        window.direwolf_config_edit.setText(original_path)
+        window._device = original_device
+        window.close()
+        app.processEvents()
+
+
+def test_remote_direwolf_ptt_wrappers() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    events: list[object] = []
+
+    class FakeRemote:
+        def start(self, level):
+            events.append(("start", level))
+            return None
+
+        def stop(self):
+            events.append("stop")
+            return True
+
+        def set_level(self, level):
+            events.append(("level", level))
+
+    adapter = FakeRemote()
+    try:
+        window._device.ptt_timeout_s = 20.0
+        assert window._key_remote_direwolf_calibration(adapter) is True
+        assert window._ptt_keyed is True
+        assert window._ptt_timer.isActive()
+        assert window._unkey_remote_direwolf_calibration(adapter) is True
+        assert window._ptt_keyed is False
+        assert window._ptt_timer.isActive() is False
+        assert events == [("start", 0.0), "stop"]
+    finally:
         window.close()
         app.processEvents()
 

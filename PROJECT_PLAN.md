@@ -467,6 +467,9 @@ Direwolf's documented `-x` transmit-calibration option supports alternating tone
 - Use an operator-approved configuration without modifying the normal configuration file.
 - Determine actual tone frequencies from the selected modem profile and verify them in testing.
 - Define PTT ownership and identify the correct audio playback stream.
+- Support a remote Direwolf host over SSH without carrying SDR IQ: the remote
+  process owns remote PTT, its remote PipeWire stream is volume-controlled,
+  and the local application verifies PTT through a network `rigctld` endpoint.
 
 ### 9.5 VARA
 
@@ -704,6 +707,15 @@ The overlay README will list the package, its purpose, and the installation attr
   **Status:** Implemented with an exclusive generated Direwolf calibration
   process. Unit tests cover process ownership, PTT confirmation, cleanup, and
   competing-instance refusal.
+- Add remote Direwolf operation over SSH for sites without the bandwidth for
+  remote SDR IQ.
+  **Status:** Implemented and unit-tested; remote-site RF, audio-route, PTT
+  readback, and watchdog validation are still pending. The local application
+  starts a temporary remote Direwolf process, controls only that remote
+  PipeWire stream, verifies remote `rigctld` PTT, and relies on both the local
+  PTT timer and a remote `timeout` watchdog covering the PTT timeout plus
+  stream-startup margin. The selected Direwolf configuration is a local
+  template; its `ADEVICE` must exist on the remote host.
 - Save machine-readable and human-readable calibration reports.
   **Status:** Implemented. Each Bessel or discriminator target record writes
   JSON and a matching Markdown report.
