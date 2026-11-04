@@ -26,6 +26,11 @@
 
 - Boolean application settings are parsed explicitly, so a stored `false`
   cannot be mistaken for an enabled option.
+- GNOME Wayland Qt applications now select Qt's `bradient` client-side
+  decoration, which honors the requested minimize/maximize/close window flags.
+  Qt's default Adwaita-style decoration could omit minimize and maximize
+  buttons even though GNOME was configured to show them. An explicit
+  `QT_WAYLAND_DECORATION` override is respected.
 
 ## 0.1.0 — 2026-10-31
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -3469,10 +3470,22 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def _configure_qt_decoration_environment() -> None:
+    """Select a Qt Wayland decoration that honors min/max window flags."""
+
+    os.environ.setdefault("QT_WAYLAND_DECORATION", "bradient")
+
+
 def run_gui() -> int:
     from PyQt6.QtWidgets import QApplication
     import sys
 
+    # GNOME/Mutter does not provide server-side decorations to native Wayland
+    # clients. Qt therefore draws client-side decorations, and its default
+    # Adwaita-style title bar can omit minimize/maximize buttons even when the
+    # QWindow flags request them. Bradient honors the window flags. Respect an
+    # explicit user override.
+    _configure_qt_decoration_environment()
     app = QApplication.instance() or QApplication(sys.argv)
     app.setFont(QFont("DejaVu Sans", 11))
     window = MainWindow()

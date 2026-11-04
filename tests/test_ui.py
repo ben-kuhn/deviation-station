@@ -12,15 +12,22 @@ from deviation_meter.ui import (  # noqa: E402
     DeviceSettings,
     DeviationReferenceDialog,
     MainWindow,
+    _configure_qt_decoration_environment,
 )
 
 
 @pytest.fixture(autouse=True)
 def _isolate_qsettings(tmp_path):
+    settings_path = str(tmp_path / "config")
+    QSettings.setPath(
+        QSettings.Format.NativeFormat,
+        QSettings.Scope.UserScope,
+        settings_path,
+    )
     QSettings.setPath(
         QSettings.Format.IniFormat,
         QSettings.Scope.UserScope,
-        str(tmp_path / "config"),
+        settings_path,
     )
 
 
@@ -212,6 +219,16 @@ def test_measurement_pane_shows_profile_reference() -> None:
     finally:
         window.close()
         app.processEvents()
+
+
+def test_qt_wayland_decoration_defaults_to_bradient(monkeypatch) -> None:
+    monkeypatch.delenv("QT_WAYLAND_DECORATION", raising=False)
+    _configure_qt_decoration_environment()
+    assert os.environ["QT_WAYLAND_DECORATION"] == "bradient"
+
+    monkeypatch.setenv("QT_WAYLAND_DECORATION", "adwaita")
+    _configure_qt_decoration_environment()
+    assert os.environ["QT_WAYLAND_DECORATION"] == "adwaita"
 
 
 def test_remote_and_reference_help_is_self_documented() -> None:

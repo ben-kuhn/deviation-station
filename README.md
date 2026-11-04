@@ -98,6 +98,22 @@ Python consumes the channelized I/Q and demodulated frequency for profile
 measurement and UI updates. The live source sample rate must be an integer
 multiple of 48 kHz; 240 kHz is the default.
 
+### GNOME Wayland title-bar buttons
+
+GNOME/Mutter does not provide server-side decorations to native Wayland
+clients. Qt therefore draws client-side decorations, and Qt's default
+Adwaita-style title bar may omit minimize/maximize buttons even when the window
+requests them. The application sets `QT_WAYLAND_DECORATION=bradient` before
+creating the Qt application so those buttons are present. An explicit
+`QT_WAYLAND_DECORATION` set by the user is respected.
+
+For exact GNOME title-bar placement and server-side decoration behavior, launch
+the app through XWayland instead:
+
+```bash
+QT_QPA_PLATFORM=xcb ~/.nix-profile/bin/deviation-meter gui
+```
+
 ### Native file dialogs on Nix
 
 The **Browse…** buttons use Qt's native file chooser. On a GTK desktop that
