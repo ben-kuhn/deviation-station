@@ -1190,6 +1190,11 @@ class MainWindow(QMainWindow):
         )
         self.bessel_bar.setVisible(False)
         measure_layout.addWidget(self.bessel_bar)
+        self.bessel_status_label = QLabel("")
+        self.bessel_status_label.setWordWrap(False)
+        self.bessel_status_label.setStyleSheet("color: #b7bcc2;")
+        self.bessel_status_label.setVisible(False)
+        measure_layout.addWidget(self.bessel_status_label)
 
         content = QHBoxLayout()
         content.setSpacing(8)
@@ -1636,6 +1641,7 @@ class MainWindow(QMainWindow):
         self.frequency_edit.setFont(
             self._scaled_font(27.0, scale, bold=True, mono=True)
         )
+        self.bessel_status_label.setFont(self._scaled_font(16.0, scale))
         self.tabs.tabBar().setFont(self._scaled_font(18.0, scale, bold=True))
         self.auto_state_label.setFont(
             self._scaled_font(22.0, scale, bold=True)
@@ -1780,8 +1786,16 @@ class MainWindow(QMainWindow):
         self.profile_label.setVisible(not bessel)
         self.profile_combo.setVisible(not bessel)
         self.bessel_bar.setVisible(bessel)
+        self.bessel_status_label.setVisible(bessel)
         if bessel:
             self._select_bessel_range()
+            if not self.bessel_status_label.text():
+                self._set_bessel_status(
+                    f"BESSEL · J0 null {self._null_index()} · "
+                    f"{self._bessel_tone_hz() / 1e3:.3f} kHz · "
+                    "WAITING FOR CARRIER",
+                    "#ffbf47",
+                )
         else:
             self._stop_tone()
             self._stop_ptt()
@@ -2084,6 +2098,10 @@ class MainWindow(QMainWindow):
     def _null_index(self) -> int:
         return int(self.null_combo.currentData())
 
+    def _set_bessel_status(self, text: str, color: str = "#b7bcc2") -> None:
+        self.bessel_status_label.setText(text)
+        self.bessel_status_label.setStyleSheet(f"color: {color};")
+
     def _reset_bessel_display(self) -> None:
         self._bessel_detector = BesselNullDetector(
             tone_frequency_hz=self._bessel_tone_hz(),
@@ -2098,6 +2116,11 @@ class MainWindow(QMainWindow):
             null_index=self._null_index(),
         )
         self.digital.set_bessel(self._bessel_progress)
+        self._set_bessel_status(
+            f"BESSEL · J0 null {self._null_index()} · "
+            f"{self._bessel_tone_hz() / 1e3:.3f} kHz · WAITING FOR CARRIER",
+            "#ffbf47",
+        )
         self.meter.set_value(None, "WAITING")
         self.meter.set_reference_marks(
             bessel_reference(
@@ -3173,10 +3196,17 @@ class MainWindow(QMainWindow):
             if progress.carrier_offset_hz is not None
             else ""
         )
-        self.status_label.setText(
+        if progress.captured is not None:
+            color = "#f5f5f5"
+        elif progress.carrier_locked:
+            color = "#b7bcc2"
+        else:
+            color = "#ffbf47"
+        self._set_bessel_status(
             f"BESSEL · J0 null {progress.null_index} · "
             f"{progress.tone_frequency_hz / 1e3:.3f} kHz"
-            f"{offset}{depth} · {progress.state}"
+            f"{offset}{depth} · {progress.state}",
+            color,
         )
 
     def _reference_profile_id(self) -> str:
@@ -3379,7 +3409,7 @@ class MainWindow(QMainWindow):
             self._bessel_spectrum_sequence = -1
             self._reset_bessel_display()
             self.status_label.setText(
-                "Bessel: waiting for carrier; remove modulation if needed"
+                "Bessel measurement running; remove modulation if needed"
             )
         else:
             self.digital.set_measurement(

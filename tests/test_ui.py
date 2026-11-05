@@ -217,6 +217,13 @@ def test_measurement_pane_shows_profile_reference() -> None:
         app.processEvents()
         assert "Bessel J0 null" in window.digital.reference_label.text()
         assert window.meter._reference_marks[0][1] == "J0"
+        assert window.bessel_status_label.isHidden() is False
+        assert "BESSEL · J0 null" in window.bessel_status_label.text()
+        window.mode_combo.setCurrentIndex(
+            window.mode_combo.findData("digital")
+        )
+        app.processEvents()
+        assert window.bessel_status_label.isHidden() is True
     finally:
         window.close()
         app.processEvents()

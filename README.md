@@ -195,6 +195,8 @@ accuracy for a steady tone.
 The simulator includes a modulation-index sweep for exercising the detector
 without RF hardware. The Bessel reading is calculated from the tone frequency
 and selected null; no SDR amplitude calibration or correction factor is used.
+The live Bessel status line below the tone/null controls shows the selected
+null, tone, carrier offset, null depth, and acquisition state.
 
 The Bessel controls can play the selected tone through the audio output chosen
 under **SDR / Rig…**, and key a compatible transmitter through network

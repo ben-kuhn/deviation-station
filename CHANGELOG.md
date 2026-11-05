@@ -16,6 +16,9 @@
 
 - Added an active-profile nominal deviation reference to the digital pane and
   amber reference marks on the analog meter.
+- Moved the detailed live Bessel status (null, tone, carrier offset, depth, and
+  state) to a dedicated line below the Bessel controls instead of the shared
+  bottom status bar.
 - Added a **Deviation Ref…** dialog covering M17, DMR, analog FM, and Bessel
   references.
 - Expanded remote-Direwolf field tooltips and added a **Remote requirements…**
