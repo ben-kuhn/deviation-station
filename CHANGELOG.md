@@ -16,9 +16,16 @@
 
 - Added an active-profile nominal deviation reference to the digital pane and
   amber reference marks on the analog meter.
-- Moved the detailed live Bessel status (null, tone, carrier offset, depth, and
-  state) to a dedicated line below the Bessel controls instead of the shared
-  bottom status bar.
+- Moved the detailed live Bessel status (null, tone, expected deviation,
+  carrier offset, depth, and state) to a dedicated line below the Bessel
+  controls instead of the shared bottom status bar.
+- Added a live built-in tone **Level** control to the manual Bessel screen, so
+  the operator can sweep drive while PTT is active. The status line explains
+  that an ARMED detector needs a level/drive change and displays the expected
+  deviation for the selected J0 null.
+- Unkeying PTT now stops the built-in tone and discards an incomplete Bessel
+  acquisition, preventing a stale null from being captured when a carrier
+  returns later. Already-captured results are preserved.
 - Added a **Deviation Ref…** dialog covering M17, DMR, analog FM, and Bessel
   references.
 - Expanded remote-Direwolf field tooltips and added a **Remote requirements…**

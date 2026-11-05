@@ -1165,6 +1165,22 @@ class MainWindow(QMainWindow):
         self.null_combo.addItem("1st J0", 1)
         self.null_combo.addItem("2nd J0", 2)
         bessel_layout.addWidget(self.null_combo)
+        self.bessel_level_label = QLabel("Level")
+        bessel_layout.addWidget(self.bessel_level_label)
+        self.bessel_level_spin = QDoubleSpinBox()
+        self.bessel_level_spin.setRange(1.0, 100.0)
+        self.bessel_level_spin.setDecimals(0)
+        self.bessel_level_spin.setSuffix(" %")
+        self.bessel_level_spin.setValue(self._device.tone_level * 100.0)
+        self.bessel_level_spin.setToolTip(
+            "Live built-in tone output level. A 2nd J0 null needs roughly "
+            "2.3 times the drive of the 1st null. If 100% is not enough, "
+            "raise the radio data-input level or use Auto-Calibrate."
+        )
+        self.bessel_level_spin.valueChanged.connect(
+            self._on_bessel_level_changed
+        )
+        bessel_layout.addWidget(self.bessel_level_spin)
         self.relock_button = QPushButton("Relock Carrier")
         bessel_layout.addWidget(self.relock_button)
         self.manual_capture_button = QPushButton("Capture")
@@ -1598,6 +1614,8 @@ class MainWindow(QMainWindow):
             self.tone_spin,
             self.null_label,
             self.null_combo,
+            self.bessel_level_label,
+            self.bessel_level_spin,
             self.relock_button,
             self.manual_capture_button,
             self.reset_bessel_button,
@@ -1790,9 +1808,14 @@ class MainWindow(QMainWindow):
         if bessel:
             self._select_bessel_range()
             if not self.bessel_status_label.text():
+                expected_hz = (
+                    carrier_null_index(self._null_index())
+                    * self._bessel_tone_hz()
+                )
                 self._set_bessel_status(
                     f"BESSEL · J0 null {self._null_index()} · "
                     f"{self._bessel_tone_hz() / 1e3:.3f} kHz · "
+                    f"expected {expected_hz / 1e3:.3f} kHz · "
                     "WAITING FOR CARRIER",
                     "#ffbf47",
                 )
@@ -1818,6 +1841,9 @@ class MainWindow(QMainWindow):
             button.setEnabled(bessel_running and not automatic)
         self.tone_button.setEnabled(bessel_running and live and not automatic)
         self.ptt_button.setEnabled(bessel_running and live and not automatic)
+        self.bessel_level_spin.setEnabled(
+            bessel_running and live and not automatic
+        )
         self.save_bessel_button.setEnabled(
             bessel_running
             and not automatic
@@ -2116,9 +2142,11 @@ class MainWindow(QMainWindow):
             null_index=self._null_index(),
         )
         self.digital.set_bessel(self._bessel_progress)
+        expected_hz = carrier_null_index(self._null_index()) * self._bessel_tone_hz()
         self._set_bessel_status(
             f"BESSEL · J0 null {self._null_index()} · "
-            f"{self._bessel_tone_hz() / 1e3:.3f} kHz · WAITING FOR CARRIER",
+            f"{self._bessel_tone_hz() / 1e3:.3f} kHz · "
+            f"expected {expected_hz / 1e3:.3f} kHz · WAITING FOR CARRIER",
             "#ffbf47",
         )
         self.meter.set_value(None, "WAITING")
@@ -2161,6 +2189,15 @@ class MainWindow(QMainWindow):
             self._bessel_spectrum_sequence = sequence
             self._show_bessel_progress(progress, spectrum)
 
+    def _on_bessel_level_changed(self, value: float) -> None:
+        level = max(0.01, min(1.0, float(value) / 100.0))
+        self._device.tone_level = level
+        if self._tone_player.active:
+            try:
+                self._tone_player.set_level(level)
+            except AudioToneError as exc:
+                self.status_label.setText(f"Tone level failed: {exc}")
+
     def _toggle_tone(self) -> None:
         if self._tone_player.active:
             self._stop_tone()
@@ -2173,14 +2210,15 @@ class MainWindow(QMainWindow):
                 frequency_hz=self._bessel_tone_hz(),
                 device_name=self._device.audio_output,
                 duration_s=max(10.0, self._device.ptt_timeout_s + 2.0),
-                level=self._device.tone_level,
+                level=self.bessel_level_spin.value() / 100.0,
             )
         except AudioToneError as exc:
             self.status_label.setText(f"Tone output failed: {exc}")
             return
         self.tone_button.setText("Tone Off")
         self.status_label.setText(
-            f"Tone output {self._bessel_tone_hz() / 1e3:.3f} kHz enabled"
+            f"Tone output {self._bessel_tone_hz() / 1e3:.3f} kHz at "
+            f"{self.bessel_level_spin.value():.0f}% enabled"
         )
 
     def _on_tone_finished(self) -> None:
@@ -2258,7 +2296,27 @@ class MainWindow(QMainWindow):
         return True
 
     def _stop_ptt(self, reason: str | None = None) -> None:
+        was_keyed = self._ptt_keyed
         self._unkey_ptt(reason)
+        if was_keyed:
+            self._stop_tone()
+            self._disarm_bessel_after_ptt()
+
+    def _disarm_bessel_after_ptt(self) -> None:
+        if not self._is_bessel_mode():
+            return
+        progress = self._bessel_progress
+        if progress is not None and progress.captured is not None:
+            return
+        self._reset_bessel_display()
+        self._set_bessel_status(
+            f"BESSEL · J0 null {self._null_index()} · "
+            f"{self._bessel_tone_hz() / 1e3:.3f} kHz · "
+            f"expected "
+            f"{carrier_null_index(self._null_index()) * self._bessel_tone_hz() / 1e3:.3f} kHz · "
+            "PTT OFF · relock after keying",
+            "#b7bcc2",
+        )
 
     def _toggle_ptt(self) -> None:
         if self._ptt_keyed:
@@ -3202,10 +3260,15 @@ class MainWindow(QMainWindow):
             color = "#b7bcc2"
         else:
             color = "#ffbf47"
+        state_text = progress.state
+        if progress.state == "ARMED" and progress.captured is None:
+            state_text = "ARMED · adjust Level / drive until carrier nulls"
         self._set_bessel_status(
             f"BESSEL · J0 null {progress.null_index} · "
-            f"{progress.tone_frequency_hz / 1e3:.3f} kHz"
-            f"{offset}{depth} · {progress.state}",
+            f"{progress.tone_frequency_hz / 1e3:.3f} kHz · "
+            f"expected "
+            f"{carrier_null_index(progress.null_index) * progress.tone_frequency_hz / 1e3:.3f} kHz"
+            f"{offset}{depth} · {state_text}",
             color,
         )
 
@@ -3272,6 +3335,7 @@ class MainWindow(QMainWindow):
         dialog = DeviceDialog(self._device, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._device = dialog.settings()
+            self.bessel_level_spin.setValue(self._device.tone_level * 100.0)
             self.status_label.setText("SDR settings updated")
             if self.auto_generator_combo.currentData() == "direwolf":
                 self._refresh_direwolf_info()

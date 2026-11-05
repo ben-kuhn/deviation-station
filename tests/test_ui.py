@@ -219,6 +219,9 @@ def test_measurement_pane_shows_profile_reference() -> None:
         assert window.meter._reference_marks[0][1] == "J0"
         assert window.bessel_status_label.isHidden() is False
         assert "BESSEL · J0 null" in window.bessel_status_label.text()
+        assert "expected" in window.bessel_status_label.text()
+        window.bessel_level_spin.setValue(60.0)
+        assert window._device.tone_level == pytest.approx(0.60)
         window.mode_combo.setCurrentIndex(
             window.mode_combo.findData("digital")
         )

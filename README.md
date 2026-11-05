@@ -196,7 +196,19 @@ The simulator includes a modulation-index sweep for exercising the detector
 without RF hardware. The Bessel reading is calculated from the tone frequency
 and selected null; no SDR amplitude calibration or correction factor is used.
 The live Bessel status line below the tone/null controls shows the selected
-null, tone, carrier offset, null depth, and acquisition state.
+null, tone, expected deviation, carrier offset, null depth, and acquisition
+state.
+
+When using the built-in tone with live SDR and PTT, adjust the **Level** control
+while the tone and PTT are active. A 2nd J0 null requires about 2.3 times the
+drive that produces the 1st null. If 100% still does not reach the null, raise
+the radio's data-input level or use the Auto-Calibrate Bessel search, which
+sweeps the level automatically.
+
+Unkeying PTT stops the built-in tone and resets any pending—but not yet
+recovered—Bessel acquisition. This prevents a later carrier return from being
+mistaken for recovery from an old null. A result that was already captured
+before PTT off is preserved.
 
 The Bessel controls can play the selected tone through the audio output chosen
 under **SDR / Rig…**, and key a compatible transmitter through network
