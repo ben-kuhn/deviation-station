@@ -90,7 +90,7 @@ from .reference import (
     reference_for_profile,
 )
 from .rigctl import RigctldClient, RigctldError
-from .ssh import SshError
+from .ssh import SshError, SshTunnel
 from .target_cal import (
     TargetCalConfig,
     TargetCalController,
@@ -112,22 +112,25 @@ SOURCE_SIMULATOR = "simulator"
 SOURCE_LIVE = "live"
 
 _REMOTE_HELP_TEXT = (
-    "Remote Direwolf is used by the Auto-Calibrate generator. The SDR stays "
-    "local and must hear the remote transmitter over RF; no SDR IQ is sent "
-    "over SSH.\n\n"
+    "Remote SSH calibration covers Direwolf and xara. The SDR stays local "
+    "and must hear the remote transmitter over RF; no SDR IQ is sent over "
+    "SSH.\n\n"
     "• SSH must work non-interactively with key authentication, for example "
     "ssh -o BatchMode=yes host true.\n"
-    "• The remote host needs direwolf, PipeWire, pw-dump, wpctl, timeout, and "
-    "pgrep. The remote user's PipeWire session must be available.\n"
-    "• The selected Direwolf file is a local template. Its ADEVICE, ARATE, "
+    "• Remote Direwolf requires direwolf, PipeWire, pw-dump, wpctl, timeout, "
+    "and pgrep. The remote user's PipeWire session must be available.\n"
+    "• Remote xara can use direct TCP or an SSH tunnel to its command port, "
+    "which normally listens on 127.0.0.1:8300 on the BBS. xara must already "
+    "be running.\n"
+    "• Direwolf config files are local templates. Their ADEVICE, ARATE, "
     "ACHANNELS, and MODEM values are uploaded; ADEVICE must exist remotely.\n"
     "• Stop any normal Direwolf instance on the remote host before starting.\n"
-    "• The remote rigctld host and port must be reachable from this machine "
-    "and from the remote host, and rigctld must listen on a reachable "
+    "• The shared remote rigctld host and port must be reachable from this "
+    "machine and from the remote host, and rigctld must listen on a reachable "
     "address. Do not use 127.0.0.1 unless both ends are the same machine.\n"
-    "• Remote Direwolf owns PTT; the application verifies PTT through the "
-    "network and uses a remote timeout watchdog as a backstop.\n"
-    "• SSH forwarding is not required or used."
+    "• Remote Direwolf and xara own PTT; the application verifies PTT through "
+    "the network and uses a remote timeout watchdog where applicable.\n"
+    "• SSH forwarding is not required for rigctld; it is used for remote xara."
 )
 
 
@@ -902,20 +905,22 @@ class DeviceDialog(QDialog):
         self.rig_port.setValue(settings.rig_port)
         form.addRow("rigctld port", self.rig_port)
         self.direwolf_remote = QCheckBox(
-            "Run Direwolf on a remote host via SSH"
+            "Use remote Direwolf over SSH"
         )
         self.direwolf_remote.setChecked(settings.direwolf_remote)
         self.direwolf_remote.setToolTip(
             "Use SSH to run the Auto-Calibrate Direwolf source remotely. "
             "Only control and remote stream volume cross SSH; SDR IQ stays "
-            "local. Open Remote requirements… for the full checklist."
+            "local. The SSH host and remote rigctld below are shared with "
+            "remote xara."
         )
         form.addRow("Remote Direwolf", self.direwolf_remote)
         self.direwolf_ssh_host = QLineEdit(settings.direwolf_ssh_host)
         self.direwolf_ssh_host.setPlaceholderText("SSH host or ~/.ssh/config alias")
         self.direwolf_ssh_host.setToolTip(
-            "SSH destination for the remote Direwolf host. BatchMode key "
-            "authentication is required; password prompts are not supported."
+            "SSH destination shared by remote Direwolf and the xara SSH "
+            "tunnel. BatchMode key authentication is required; password "
+            "prompts are not supported."
         )
         form.addRow("SSH host", self.direwolf_ssh_host)
         self.direwolf_remote_rig_host = QLineEdit(
@@ -925,9 +930,9 @@ class DeviceDialog(QDialog):
             "rigctld host reachable from this machine and the remote host"
         )
         self.direwolf_remote_rig_host.setToolTip(
-            "The remote rigctld must be reachable from this machine and from "
-            "the remote Direwolf host. rigctld must listen on a reachable "
-            "interface. Do not use 127.0.0.1 unless both ends are local."
+            "The remote rigctld is shared by remote Direwolf and remote xara. "
+            "It must be reachable from this machine and from the remote host. "
+            "Do not use 127.0.0.1 unless both ends are local."
         )
         form.addRow("Remote rigctld host", self.direwolf_remote_rig_host)
         self.direwolf_remote_rig_port = QSpinBox()
@@ -936,13 +941,15 @@ class DeviceDialog(QDialog):
             settings.direwolf_remote_rig_port
         )
         self.direwolf_remote_rig_port.setToolTip(
-            "Port used by the remote rigctld for frequency and PTT control."
+            "Port used by the shared remote rigctld for frequency and PTT "
+            "control."
         )
         form.addRow("Remote rigctld port", self.direwolf_remote_rig_port)
         self.direwolf_remote_note = QLabel(
             "SSH control only; no SDR IQ. The local SDR must hear the remote "
-            "transmitter. The config is a local template; its ADEVICE must "
-            "exist remotely. Stop normal remote Direwolf first."
+            "transmitter. These SSH/rig settings are shared by remote "
+            "Direwolf and remote xara. Direwolf config files are local "
+            "templates whose ADEVICE must exist remotely."
         )
         self.direwolf_remote_note.setWordWrap(True)
         self.direwolf_remote_note.setMinimumHeight(48)
@@ -954,11 +961,10 @@ class DeviceDialog(QDialog):
         )
         self.direwolf_remote_help_button.setToolTip(
             "Show SSH, remote PipeWire, rigctld, ADEVICE, RF, and PTT "
-            "requirements for remote Direwolf."
+            "requirements for remote calibration."
         )
         self.direwolf_remote_help_button.clicked.connect(self._show_remote_help)
         form.addRow(self.direwolf_remote_help_button)
-        self.direwolf_remote.toggled.connect(self._update_remote_fields)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
@@ -967,21 +973,11 @@ class DeviceDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
-        self._update_remote_fields(self.direwolf_remote.isChecked())
-
-    def _update_remote_fields(self, enabled: bool) -> None:
-        for widget in (
-            self.direwolf_ssh_host,
-            self.direwolf_remote_rig_host,
-            self.direwolf_remote_rig_port,
-            self.direwolf_remote_note,
-        ):
-            widget.setEnabled(enabled)
 
     def _show_remote_help(self) -> None:
         QMessageBox.information(
             self,
-            "Remote Direwolf requirements",
+            "Remote calibration requirements",
             _REMOTE_HELP_TEXT,
         )
 
@@ -1040,6 +1036,8 @@ class MainWindow(QMainWindow):
         self._direwolf_profile: DirewolfProfile | None = None
         self._direwolf_profile_error: str | None = None
         self._xara_calibration: XaraCalibration | None = None
+        self._xara_tunnel: SshTunnel | None = None
+        self._xara_remote = False
         self._ptt_keyed = False
         self._frequency_hz = 443_457_000.0
         self._source_label = "SIMULATOR"
@@ -1357,16 +1355,35 @@ class MainWindow(QMainWindow):
         xara_layout = QHBoxLayout(self.xara_bar)
         xara_layout.setContentsMargins(0, 0, 0, 0)
         xara_layout.setSpacing(8)
-        self.xara_host_label = QLabel("Host")
+        self.xara_transport_label = QLabel("Transport")
+        xara_layout.addWidget(self.xara_transport_label)
+        self.xara_transport_combo = QComboBox()
+        self.xara_transport_combo.addItem("Direct TCP", "direct")
+        self.xara_transport_combo.addItem("SSH tunnel", "ssh")
+        self.xara_transport_combo.setMinimumWidth(130)
+        self.xara_transport_combo.setToolTip(
+            "Direct TCP connects to the xara command port. SSH tunnel forwards "
+            "the remote loopback command port through the shared SSH host."
+        )
+        xara_layout.addWidget(self.xara_transport_combo)
+        self.xara_host_label = QLabel("xara host")
         xara_layout.addWidget(self.xara_host_label)
         self.xara_host_edit = QLineEdit("127.0.0.1")
         self.xara_host_edit.setMinimumWidth(130)
+        self.xara_host_edit.setToolTip(
+            "xara command host for Direct TCP. For SSH tunnel, the tunnel "
+            "connects to 127.0.0.1 on the shared SSH host."
+        )
         xara_layout.addWidget(self.xara_host_edit)
         self.xara_port_label = QLabel("Command port")
         xara_layout.addWidget(self.xara_port_label)
         self.xara_port_spin = QSpinBox()
         self.xara_port_spin.setRange(1, 65535)
         self.xara_port_spin.setValue(8300)
+        self.xara_port_spin.setToolTip(
+            "xara command port on the target host (default 8300). SSH tunnels "
+            "forward this remote loopback port."
+        )
         xara_layout.addWidget(self.xara_port_spin)
         self.xara_info_label = QLabel(
             "Start xara with --radio and --ptt rigctld; TUNE uses 1500 Hz."
@@ -1387,7 +1404,6 @@ class MainWindow(QMainWindow):
         )
         self.xara_bar.setVisible(False)
         auto_generator_bar.addWidget(self.xara_bar, 1)
-        auto_generator_bar.addStretch(1)
         auto_layout.addLayout(auto_generator_bar)
 
         auto_content = QHBoxLayout()
@@ -1519,6 +1535,9 @@ class MainWindow(QMainWindow):
         )
         self.xara_host_edit.editingFinished.connect(self._refresh_xara_info)
         self.xara_port_spin.valueChanged.connect(self._refresh_xara_info)
+        self.xara_transport_combo.currentIndexChanged.connect(
+            self._on_xara_transport_changed
+        )
         self.start_button.clicked.connect(self._toggle_running)
         self.device_button.clicked.connect(self._edit_device)
         self.read_rig_button.clicked.connect(self._read_from_rig)
@@ -1652,6 +1671,8 @@ class MainWindow(QMainWindow):
             self.xara_host_edit,
             self.xara_port_label,
             self.xara_port_spin,
+            self.xara_transport_label,
+            self.xara_transport_combo,
             self.xara_info_label,
             self.auto_safety_label,
         ):
@@ -1711,6 +1732,10 @@ class MainWindow(QMainWindow):
             str(store.value("xara_host", "127.0.0.1"))
         )
         self.xara_port_spin.setValue(int(store.value("xara_port", 8300)))
+        xara_transport = str(store.value("xara_transport", "direct"))
+        transport_index = self.xara_transport_combo.findData(xara_transport)
+        if transport_index >= 0:
+            self.xara_transport_combo.setCurrentIndex(transport_index)
         direwolf_tone = str(store.value("direwolf_tone", "mark"))
         tone_index = self.direwolf_tone_combo.findData(direwolf_tone)
         if tone_index >= 0:
@@ -1762,6 +1787,10 @@ class MainWindow(QMainWindow):
         )
         store.setValue("xara_host", self.xara_host_edit.text().strip())
         store.setValue("xara_port", self.xara_port_spin.value())
+        store.setValue(
+            "xara_transport",
+            self.xara_transport_combo.currentData(),
+        )
 
         store.setValue("meter_range", float(self.range_combo.currentData()))
         store.setValue("frequency_mhz", self._frequency_hz / 1e6)
@@ -1876,7 +1905,18 @@ class MainWindow(QMainWindow):
                     and self._device.direwolf_remote_rig_host.strip()
                 )
         elif generator == "xara":
-            generator_ready = bool(self.xara_host_edit.text().strip())
+            transport = str(self.xara_transport_combo.currentData())
+            if transport == "ssh":
+                generator_ready = bool(
+                    self._device.direwolf_ssh_host.strip()
+                    and self._device.direwolf_remote_rig_host.strip()
+                )
+            else:
+                generator_ready = bool(self.xara_host_edit.text().strip())
+                if self._xara_is_remote():
+                    generator_ready = generator_ready and bool(
+                        self._device.direwolf_remote_rig_host.strip()
+                    )
         self.auto_start_button.setEnabled(
             (live or rehearsal) and not running and generator_ready
         )
@@ -1916,8 +1956,11 @@ class MainWindow(QMainWindow):
             self.direwolf_tone_combo,
             self.xara_host_edit,
             self.xara_port_spin,
+            self.xara_transport_combo,
         ):
             control.setEnabled(not running)
+        if not running and self.xara_transport_combo.currentData() == "ssh":
+            self.xara_host_edit.setEnabled(False)
         self.auto_tone_spin.setEnabled(
             not running and generator == "internal"
         )
@@ -2004,12 +2047,57 @@ class MainWindow(QMainWindow):
                 int(self.auto_null_combo.currentData()),
             )
 
+    def _xara_is_remote(self) -> bool:
+        transport = str(self.xara_transport_combo.currentData())
+        if transport == "ssh":
+            return True
+        host = self.xara_host_edit.text().strip().lower()
+        return host not in {"", "127.0.0.1", "localhost", "::1"}
+
+    def _on_xara_transport_changed(self) -> None:
+        transport = str(self.xara_transport_combo.currentData())
+        direct = transport == "direct"
+        self.xara_host_label.setVisible(direct)
+        self.xara_host_edit.setVisible(direct)
+        self.xara_host_edit.setEnabled(direct)
+        self._refresh_xara_info()
+
     def _refresh_xara_info(self) -> None:
         if not hasattr(self, "xara_info_label"):
             return
-        self.xara_info_label.setText(
-            f"{self.xara_host_edit.text().strip() or '127.0.0.1'}:"
-            f"{self.xara_port_spin.value()}"
+        transport = str(self.xara_transport_combo.currentData())
+        port = self.xara_port_spin.value()
+        if transport == "ssh":
+            ssh_host = self._device.direwolf_ssh_host.strip()
+            endpoint = (
+                f"SSH {ssh_host or '(set SSH host)'} → "
+                f"127.0.0.1:{port}"
+            )
+        else:
+            endpoint = f"{self.xara_host_edit.text().strip() or '127.0.0.1'}:{port}"
+        if self._xara_is_remote():
+            rig_host = self._device.direwolf_remote_rig_host.strip()
+            rig_text = (
+                f"rig {rig_host or '(set remote rig)'}:"
+                f"{self._device.direwolf_remote_rig_port}"
+            )
+            missing = (
+                (transport == "ssh" and not self._device.direwolf_ssh_host.strip())
+                or not rig_host
+            )
+        else:
+            rig_text = (
+                f"rig {self._device.rig_host}:{self._device.rig_port}"
+            )
+            missing = False
+        self.xara_info_label.setText(f"{endpoint} · {rig_text}")
+        self.xara_info_label.setStyleSheet(
+            "color: #ffbf47;" if missing else "color: #b7bcc2;"
+        )
+        self.xara_info_label.setToolTip(
+            f"{endpoint} · {rig_text}. xara TUNE uses a 1500 Hz ALC test tone "
+            "and drive from -30 to 0 dB. SSH tunnel uses the shared SSH host; "
+            "remote rig uses the shared remote rigctld from SDR / Rig."
         )
         self._update_auto_control_state()
 
@@ -2363,6 +2451,8 @@ class MainWindow(QMainWindow):
                 "direwolf_ssh_host": self._device.direwolf_ssh_host,
                 "remote_rig_host": self._device.direwolf_remote_rig_host,
                 "remote_rig_port": self._device.direwolf_remote_rig_port,
+                "xara_transport": self.xara_transport_combo.currentData(),
+                "xara_remote": self._xara_is_remote(),
             },
             audio_output=(
                 self._device.audio_output or TonePlayer.default_output_name()
@@ -2419,6 +2509,8 @@ class MainWindow(QMainWindow):
                     "direwolf_ssh_host": self._device.direwolf_ssh_host,
                     "remote_rig_host": self._device.direwolf_remote_rig_host,
                     "remote_rig_port": self._device.direwolf_remote_rig_port,
+                    "xara_transport": self.xara_transport_combo.currentData(),
+                    "xara_remote": self._xara_is_remote(),
                 },
                 source=self._auto_run_generator,
                 audio_output=(
@@ -2495,7 +2587,10 @@ class MainWindow(QMainWindow):
         remote_direwolf = (
             self._device.direwolf_remote and generator == "direwolf"
         )
-        frequency = self._prepare_auto_frequency(remote=remote_direwolf)
+        remote_xara = generator == "xara" and self._xara_is_remote()
+        frequency = self._prepare_auto_frequency(
+            remote=remote_direwolf or remote_xara
+        )
         if frequency is None:
             return
         self._frequency_hz = frequency
@@ -2631,6 +2726,8 @@ class MainWindow(QMainWindow):
         self._direwolf_calibration = None
         self._remote_direwolf_calibration = None
         self._xara_calibration = None
+        self._xara_tunnel = None
+        self._xara_remote = False
         if generator == "direwolf":
             profile = self._direwolf_profile
             if profile is None or self._direwolf_profile_error is not None:
@@ -2712,25 +2809,74 @@ class MainWindow(QMainWindow):
             )
             return tone_hz, _DirewolfAutoCalHardware(self, adapter), notes
         if generator == "xara":
+            transport = str(self.xara_transport_combo.currentData())
             host = self.xara_host_edit.text().strip()
-            if not host:
-                self.status_label.setText("Enter the xara command host")
-                return None
-            tone_hz = XaraCalibration.tone_frequency_hz
-            adapter = XaraCalibration(
-                XaraConfig(
-                    host=host,
-                    port=self.xara_port_spin.value(),
-                    min_drive_db=-30.0,
-                    max_drive_db=0.0,
-                    rig_host=self._device.rig_host,
-                    rig_port=self._device.rig_port,
+            command_port = self.xara_port_spin.value()
+            ssh_host = self._device.direwolf_ssh_host.strip()
+            tunnel: SshTunnel | None = None
+            if transport == "ssh":
+                if not ssh_host:
+                    self.status_label.setText(
+                        "Configure the shared SSH host in SDR / Rig for the "
+                        "xara tunnel"
+                    )
+                    return None
+                try:
+                    tunnel = SshTunnel(ssh_host, remote_port=command_port)
+                except SshError as exc:
+                    self.status_label.setText(f"xara SSH tunnel settings: {exc}")
+                    return None
+                xara_host = "127.0.0.1"
+                xara_port = tunnel.local_port
+                endpoint_text = (
+                    f"SSH {ssh_host} → 127.0.0.1:{command_port}"
                 )
-            )
+                remote_xara = True
+            else:
+                if not host:
+                    self.status_label.setText("Enter the xara command host")
+                    return None
+                xara_host = host
+                xara_port = command_port
+                endpoint_text = f"{host}:{command_port}"
+                remote_xara = self._xara_is_remote()
+            if remote_xara:
+                remote_rig_host = (
+                    self._device.direwolf_remote_rig_host.strip()
+                )
+                if not remote_rig_host:
+                    self.status_label.setText(
+                        "Configure the shared remote rigctld host in SDR / Rig "
+                        "for remote xara"
+                    )
+                    return None
+                rig_host = remote_rig_host
+                rig_port = self._device.direwolf_remote_rig_port
+            else:
+                rig_host = self._device.rig_host
+                rig_port = self._device.rig_port
+            tone_hz = XaraCalibration.tone_frequency_hz
+            try:
+                adapter = XaraCalibration(
+                    XaraConfig(
+                        host=xara_host,
+                        port=xara_port,
+                        min_drive_db=-30.0,
+                        max_drive_db=0.0,
+                        rig_host=rig_host,
+                        rig_port=rig_port,
+                    )
+                )
+            except XaraError as exc:
+                self.status_label.setText(f"xara settings: {exc}")
+                return None
+            self._xara_tunnel = tunnel
+            self._xara_remote = remote_xara
             self._xara_calibration = adapter
             notes = (
                 f"Auto-calibrated {purpose} via xara TUNE "
-                f"{tone_hz:g} Hz; command {host}:{self.xara_port_spin.value()}; "
+                f"{tone_hz:g} Hz; command {endpoint_text}; "
+                f"PTT {rig_host}:{rig_port}; "
                 "drive control is quantized to 1 dB"
             )
             return tone_hz, _XaraAutoCalHardware(self, adapter), notes
@@ -3008,11 +3154,21 @@ class MainWindow(QMainWindow):
         return True
 
     def _key_xara_calibration(self, adapter: XaraCalibration) -> bool:
-        adapter.start(0.0)
+        tunnel = self._xara_tunnel
+        try:
+            if tunnel is not None and not tunnel.active:
+                tunnel.start()
+            adapter.start(0.0)
+        except (XaraError, SshError, OSError) as exc:
+            if tunnel is not None:
+                tunnel.stop()
+            self.status_label.setText(f"xara start failed: {exc}")
+            return False
         self._ptt_keyed = True
         self._ptt_timer.start(int(round(self._device.ptt_timeout_s * 1000.0)))
+        mode = "Remote xara" if self._xara_remote else "xara"
         self.status_label.setText(
-            "xara TUNE PTT ON — automatic unkey in "
+            f"{mode} TUNE PTT ON — automatic unkey in "
             f"{self._device.ptt_timeout_s:.0f} s"
         )
         return True
@@ -3023,7 +3179,17 @@ class MainWindow(QMainWindow):
             adapter.stop()
         except (XaraError, OSError, RuntimeError) as exc:
             cleanup_error = str(exc)
-        confirmed = self._unkey_ptt()
+        tunnel = self._xara_tunnel
+        self._xara_tunnel = None
+        if tunnel is not None:
+            tunnel.stop()
+        if self._xara_remote:
+            self._ptt_timer.stop()
+            self._ptt_keyed = False
+            confirmed = cleanup_error is None
+        else:
+            confirmed = self._unkey_ptt()
+        self._xara_remote = False
         if cleanup_error is not None:
             self.status_label.setText(f"xara cleanup failed: {cleanup_error}")
             return False
@@ -3089,6 +3255,11 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(f"xara cleanup failed: {exc}")
             self._ptt_timer.stop()
             self._ptt_keyed = False
+        tunnel = self._xara_tunnel
+        self._xara_tunnel = None
+        if tunnel is not None:
+            tunnel.stop()
+        self._xara_remote = False
         self._ptt_timer.stop()
         self._ptt_keyed = False
         self._update_auto_control_state()
@@ -3339,6 +3510,8 @@ class MainWindow(QMainWindow):
             self.status_label.setText("SDR settings updated")
             if self.auto_generator_combo.currentData() == "direwolf":
                 self._refresh_direwolf_info()
+            elif self.auto_generator_combo.currentData() == "xara":
+                self._refresh_xara_info()
             if self.source_combo.currentData() == SOURCE_LIVE:
                 self.start_measurement()
 
@@ -3352,9 +3525,20 @@ class MainWindow(QMainWindow):
         return frequency_mhz * 1e6
 
     def _selected_rig_endpoint(self) -> tuple[str, int, bool]:
+        generator = str(self.auto_generator_combo.currentData())
+        if (
+            generator == "xara"
+            and self._xara_is_remote()
+            and self._device.direwolf_remote_rig_host.strip()
+        ):
+            return (
+                self._device.direwolf_remote_rig_host.strip(),
+                self._device.direwolf_remote_rig_port,
+                True,
+            )
         if (
             self._device.direwolf_remote
-            and self.auto_generator_combo.currentData() == "direwolf"
+            and generator == "direwolf"
             and self._device.direwolf_remote_rig_host.strip()
         ):
             return (

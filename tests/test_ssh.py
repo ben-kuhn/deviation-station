@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from deviation_meter.ssh import SshError, SshTransport
+from deviation_meter.ssh import SshError, SshTransport, SshTunnel
 
 
 def _result(command, returncode=0, stdout="", stderr=""):
@@ -57,3 +57,46 @@ def test_ssh_transport_rejects_unsafe_hosts() -> None:
         SshTransport("-oProxyCommand=bad")
     with pytest.raises(SshError):
         SshTransport("host name")
+
+
+def test_ssh_tunnel_builds_loopback_forward() -> None:
+    tunnel = SshTunnel("bench-pi", 8300, local_port=18300)
+    command = tunnel._ssh_command()
+    assert "ExitOnForwardFailure=yes" in command
+    assert "127.0.0.1:18300:127.0.0.1:8300" in command
+    assert command[-1] == "bench-pi"
+
+
+def test_ssh_tunnel_reports_early_exit() -> None:
+    class FakeProcess:
+        def poll(self):
+            return 1
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            del timeout
+            return 1
+
+        def kill(self):
+            pass
+
+    tunnel = SshTunnel(
+        "bench-pi",
+        8300,
+        local_port=18301,
+        process_factory=lambda *args, **kwargs: FakeProcess(),
+    )
+    with pytest.raises(SshError, match="exited before becoming ready"):
+        tunnel.start()
+    assert tunnel.active is False
+
+
+def test_ssh_tunnel_rejects_invalid_ports() -> None:
+    with pytest.raises(SshError):
+        SshTunnel("bench-pi", 0)
+    with pytest.raises(SshError):
+        SshTunnel("bench-pi", 8300, local_port=70000)
+    with pytest.raises(SshError):
+        SshTunnel("", 8300)

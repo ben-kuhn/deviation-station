@@ -11,6 +11,9 @@
 - Remote mode uses the selected Direwolf configuration as a local template;
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
+- Remote xara TUNE can use direct TCP or an SSH local-port tunnel to the BBS
+  command port. Remote xara reuses the shared remote `rigctld` for frequency
+  and PTT verification.
 
 ### Measurement UI
 

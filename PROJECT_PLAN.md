@@ -495,6 +495,8 @@ Assess xara's VARA-compatible control interface and calibration behavior. Reuse 
 `TUNE -30..0 dB`, `TUNE OFF`, and `TUNE ?`; the 1500 Hz ALC tone is available as
 a bounded calibration source. The adapter verifies PTT through `rigctld` and
 relies on xara’s automatic tune-off when the command client disconnects.
+Remote xara can use direct TCP or an SSH loopback port-forward for the command
+port and reuses the shared remote `rigctld` endpoint.
 
 ### 9.7 QTSoundModem
 

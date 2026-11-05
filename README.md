@@ -319,7 +319,7 @@ The application queries the remote rig frequency/mode and uses it for the
 preflight check when the remote Direwolf generator is selected. While that
 generator is selected, **Read from Rig** and **Link Rig Frequency** also use
 the remote rig endpoint; the local rig fields remain in use for manual and
-internal/xara calibration. Remote calibration requires the same FM-mode and
+local xara calibration. Remote calibration requires the same FM-mode and
 frequency-match rules as local calibration.
 
 If startup fails, check non-interactive SSH, the remote `PATH` for
@@ -352,6 +352,32 @@ command connection closes.
 xara permits one command client at a time. Close other command-port clients
 before calibration. The xara TUNE tone is 1500 Hz and is not full-scale, so the
 radio’s data-input level may need to be raised to obtain a deep Bessel null.
+
+#### Remote xara on the BBS
+
+The xara TUNE source can run on the BBS while the SDR remains local. In
+Auto-Calibrate, select xara and choose a transport:
+
+- **Direct TCP** — enter the BBS host and command port. xara must be started
+  with `--addr` set to an address reachable from this machine.
+- **SSH tunnel** — leave xara bound to its default `127.0.0.1:8300`; the
+  application forwards the remote command port through the shared SSH host
+  from **SDR / Rig…**. This is the safer choice because the xara command port
+  is unauthenticated.
+
+Remote xara reuses the shared remote `rigctld` host and port from **SDR /
+Rig…**. xara itself must use the same rigctld for PTT, for example:
+
+```bash
+xara --call YOURCALL --fm wide --radio \
+  --ptt rigctld:REMOTE_RIG_HOST:4532 \
+  --capture <pipewire-source> --playback <pipewire-sink> \
+  --port 8300 --kiss-port off
+```
+
+The local SDR must hear the BBS transmitter. Only xara command traffic crosses
+SSH; no SDR IQ is transported. The application verifies xara VERSION/PTT,
+controls `TUNE -30..0 dB`, and sends `TUNE OFF` at completion.
 
 ### VARA and QtSoundModem — manual-assisted
 

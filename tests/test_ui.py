@@ -271,6 +271,83 @@ def test_remote_and_reference_help_is_self_documented() -> None:
         app.processEvents()
 
 
+def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    original_generator = window.auto_generator_combo.currentData()
+    original_source = window.source_combo.currentData()
+    original_transport = window.xara_transport_combo.currentData()
+    original_device = replace(window._device)
+    try:
+        window.source_combo.setCurrentIndex(window.source_combo.findData("live"))
+        window.auto_generator_combo.setCurrentIndex(
+            window.auto_generator_combo.findData("xara")
+        )
+        window.xara_transport_combo.setCurrentIndex(
+            window.xara_transport_combo.findData("ssh")
+        )
+        window.xara_host_edit.setText("127.0.0.1")
+        window.xara_port_spin.setValue(8300)
+        window._device.direwolf_ssh_host = "bench-pi"
+        window._device.direwolf_remote_rig_host = "station.local"
+        window._device.direwolf_remote_rig_port = 4532
+        window._refresh_xara_info()
+        app.processEvents()
+        assert "SSH bench-pi" in window.xara_info_label.text()
+        assert "rig station.local:4532" in window.xara_info_label.text()
+        assert window._selected_rig_endpoint() == (
+            "station.local",
+            4532,
+            True,
+        )
+        assert window.auto_start_button.isEnabled() is True
+
+        prepared = window._prepare_auto_io("xara", "bessel")
+        assert prepared is not None
+        adapter = window._xara_calibration
+        assert adapter is not None
+        assert adapter.config.host == "127.0.0.1"
+        assert adapter.config.port != 8300
+        assert adapter.config.rig_host == "station.local"
+        assert window._xara_remote is True
+        assert window._xara_tunnel is not None
+        assert window._xara_tunnel.active is False
+        assert "SSH bench-pi" in window._auto_run_notes or "SSH bench-pi" in prepared[2]
+        window._xara_tunnel = None
+        window._xara_calibration = None
+
+        window.xara_transport_combo.setCurrentIndex(
+            window.xara_transport_combo.findData("direct")
+        )
+        window.xara_host_edit.setText("bbs.local")
+        window._refresh_xara_info()
+        prepared = window._prepare_auto_io("xara", "bessel")
+        assert prepared is not None
+        adapter = window._xara_calibration
+        assert adapter is not None
+        assert adapter.config.host == "bbs.local"
+        assert adapter.config.rig_host == "station.local"
+        assert window._xara_tunnel is None
+        window._xara_calibration = None
+    finally:
+        if window._xara_tunnel is not None:
+            window._xara_tunnel.stop()
+            window._xara_tunnel = None
+        window._xara_calibration = None
+        window.auto_generator_combo.setCurrentIndex(
+            window.auto_generator_combo.findData(original_generator)
+        )
+        window.source_combo.setCurrentIndex(
+            window.source_combo.findData(original_source)
+        )
+        window.xara_transport_combo.setCurrentIndex(
+            window.xara_transport_combo.findData(original_transport)
+        )
+        window._device = original_device
+        window.close()
+        app.processEvents()
+
+
 def test_auto_tab_switches_to_xara_source() -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
