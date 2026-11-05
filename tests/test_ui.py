@@ -5,6 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from PyQt6.QtCore import QSettings  # noqa: E402
+from PyQt6.QtGui import QFontMetrics  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from deviation_meter.ui import (  # noqa: E402
@@ -315,6 +316,27 @@ def test_auto_tab_switches_to_target_method() -> None:
         window.source_combo.setCurrentIndex(
             window.source_combo.findData(original_source)
         )
+        window.close()
+        app.processEvents()
+
+
+def test_frequency_box_keeps_full_value_visible() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        window.resize(1280, 720)
+        window.show()
+        for size in ((1280, 720), (1920, 1080), (2560, 1440)):
+            window.resize(*size)
+            app.processEvents()
+            metrics = QFontMetrics(window.frequency_edit.font())
+            text_width = metrics.horizontalAdvance(
+                window.frequency_edit.text()
+            )
+            assert window.frequency_label.text() == "RX Freq"
+            assert window.frequency_edit.width() == 370
+            assert text_width <= window.frequency_edit.width() - 24
+    finally:
         window.close()
         app.processEvents()
 

@@ -26,6 +26,10 @@
 
 - Boolean application settings are parsed explicitly, so a stored `false`
   cannot be mistaken for an enabled option.
+- The receive-frequency field now has a fixed width sized for the full
+  `MHz` value at the largest responsive font scale, and its label is shortened
+  to **RX Freq**. It no longer shrinks and scrolls to the least-significant
+  digits.
 - GNOME Wayland Qt applications now select Qt's `bradient` client-side
   decoration, which honors the requested minimize/maximize/close window flags.
   Qt's default Adwaita-style decoration could omit minimize and maximize

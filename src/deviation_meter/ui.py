@@ -1431,11 +1431,19 @@ class MainWindow(QMainWindow):
         )
         bottom_layout = QHBoxLayout(bottom)
         bottom_layout.setContentsMargins(12, 6, 12, 6)
-        self.frequency_label = QLabel("Receive frequency")
+        self.frequency_label = QLabel("RX Freq")
         self.frequency_label.setStyleSheet("border: none;")
+        self.frequency_label.setToolTip("Receive frequency")
         bottom_layout.addWidget(self.frequency_label)
         self.frequency_edit = QLineEdit()
-        self.frequency_edit.setMinimumWidth(190)
+        self.frequency_edit.setFixedWidth(370)
+        self.frequency_edit.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.frequency_edit.setToolTip(
+            "Receive frequency in MHz. The full value stays visible."
+        )
         bottom_layout.addWidget(self.frequency_edit)
         self.units_label = QLabel("MHz")
         self.units_label.setStyleSheet("border: none;")

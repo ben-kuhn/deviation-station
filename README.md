@@ -145,10 +145,11 @@ ${gsettings-desktop-schemas}/share/gsettings-schemas/gsettings-desktop-schemas-<
 Do not rely on `GSETTINGS_SCHEMAS_PATH` alone; GLib's native dialog reads
 `GSETTINGS_SCHEMA_DIR`.
 
-The receive-frequency field is always available in the bottom bar. With
-`rigctld` running, **Read from Rig** imports the current frequency. Enabling
-**Link Rig Frequency** writes committed keyboard entries through `rigctld` and
-uses the confirmed readback value.
+The receive-frequency field is always available in the bottom bar. Its fixed
+width keeps the full MHz value visible at every responsive scale; the label is
+shortened to **RX Freq**. With `rigctld` running, **Read from Rig** imports the
+current frequency. Enabling **Link Rig Frequency** writes committed keyboard
+entries through `rigctld` and uses the confirmed readback value.
 
 The measure screen provides:
 
