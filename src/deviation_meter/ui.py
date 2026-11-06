@@ -449,7 +449,14 @@ class AnalogMeter(QWidget):
         status_font = QFont("DejaVu Sans")
         status_font.setPixelSize(max(11, int(round(17.0 * unit))))
         status_font.setBold(True)
-        painter.setPen(WHITE if self._status in ("", "LIVE") else AMBER)
+        status = self._status.upper()
+        if status in {"", "LIVE"}:
+            status_color = WHITE
+        elif "FAIL" in status or "ERROR" in status or "UNKEY" in status:
+            status_color = RED
+        else:
+            status_color = AMBER
+        painter.setPen(status_color)
         painter.setFont(status_font)
         painter.drawText(
             QRectF(0.0, height - 38.0 * unit, width, 28.0 * unit),
@@ -1373,6 +1380,20 @@ class MainWindow(QMainWindow):
             "(--port, normally 8300). This is not the web UI --ui-port."
         )
         xara_layout.addWidget(self.xara_port_spin)
+        self.xara_tone_label = QLabel("Tone")
+        xara_layout.addWidget(self.xara_tone_label)
+        self.xara_tone_spin = QDoubleSpinBox()
+        self.xara_tone_spin.setRange(100.0, 5000.0)
+        self.xara_tone_spin.setDecimals(0)
+        self.xara_tone_spin.setSuffix(" Hz")
+        self.xara_tone_spin.setValue(1500.0)
+        self.xara_tone_spin.setToolTip(
+            "Actual steady TUNE tone frequency. xara uses 1500 Hz; verify "
+            "VARA. This affects Bessel null calculations, not the target "
+            "deviation reading."
+        )
+        self.xara_tone_spin.valueChanged.connect(self._on_xara_tone_changed)
+        xara_layout.addWidget(self.xara_tone_spin)
         self.xara_use_rig_check = QCheckBox("Use rigctld")
         self.xara_use_rig_check.setToolTip(
             "Optional frequency/mode preflight through a rigctld. PTT is "
@@ -1461,6 +1482,13 @@ class MainWindow(QMainWindow):
             "QProgressBar::chunk { background: #ffbf47; }"
         )
         auto_info_layout.addWidget(self.auto_progress)
+        self.auto_outcome_label = QLabel("")
+        self.auto_outcome_label.setWordWrap(True)
+        self.auto_outcome_label.setStyleSheet(
+            "border: none; color: #ff6868; font-weight: bold;"
+        )
+        self.auto_outcome_label.setVisible(False)
+        auto_info_layout.addWidget(self.auto_outcome_label)
         self.auto_detail_label = QLabel(
             "Live SDR + rigctld PTT required. The controller keys briefly, "
             "sweeps the internal tone level, refines the selected J0 null, "
@@ -1694,6 +1722,8 @@ class MainWindow(QMainWindow):
             self.xara_host_edit,
             self.xara_port_label,
             self.xara_port_spin,
+            self.xara_tone_label,
+            self.xara_tone_spin,
             self.xara_use_rig_check,
             self.xara_rig_port_label,
             self.xara_rig_port_spin,
@@ -1712,6 +1742,9 @@ class MainWindow(QMainWindow):
         )
         self.auto_level_label.setFont(self._scaled_font(16.0, scale))
         self.auto_depth_label.setFont(self._scaled_font(16.0, scale))
+        self.auto_outcome_label.setFont(
+            self._scaled_font(15.0, scale, bold=True)
+        )
         self.auto_detail_label.setFont(self._scaled_font(13.0, scale))
 
     def resizeEvent(self, event) -> None:  # noqa: N802
@@ -1761,6 +1794,9 @@ class MainWindow(QMainWindow):
             str(store.value("xara_host", "127.0.0.1"))
         )
         self.xara_port_spin.setValue(int(store.value("xara_port", 8300)))
+        self.xara_tone_spin.setValue(
+            float(store.value("xara_tone_hz", 1500.0))
+        )
         self.xara_use_rig_check.setChecked(
             _settings_bool(store.value("xara_use_rig", False))
         )
@@ -1821,6 +1857,7 @@ class MainWindow(QMainWindow):
         )
         store.setValue("xara_host", self.xara_host_edit.text().strip())
         store.setValue("xara_port", self.xara_port_spin.value())
+        store.setValue("xara_tone_hz", self.xara_tone_spin.value())
         store.setValue(
             "xara_use_rig",
             self.xara_use_rig_check.isChecked(),
@@ -1987,6 +2024,7 @@ class MainWindow(QMainWindow):
             self.direwolf_tone_combo,
             self.xara_host_edit,
             self.xara_port_spin,
+            self.xara_tone_spin,
             self.xara_use_rig_check,
             self.xara_rig_port_spin,
             self.xara_test_button,
@@ -2040,7 +2078,9 @@ class MainWindow(QMainWindow):
                 "null, then unkeys automatically."
             )
             if self.auto_generator_combo.currentData() == "xara":
-                self._set_auto_meter_range(1_500.0, 1)
+                self._set_auto_meter_range(
+                    self.xara_tone_spin.value(), 1
+                )
             elif self.auto_generator_combo.currentData() == "direwolf":
                 self._refresh_direwolf_info()
             else:
@@ -2061,21 +2101,32 @@ class MainWindow(QMainWindow):
         elif xara:
             self._direwolf_profile = None
             self._direwolf_profile_error = None
-            self.auto_tone_spin.setValue(1.5)
+            tone_hz = self.xara_tone_spin.value()
+            self.auto_tone_spin.setValue(tone_hz / 1e3)
             self._refresh_xara_info()
-            self._set_auto_meter_range(
-                1_500.0,
-                int(self.auto_null_combo.currentData()),
-            )
+            if self.auto_method_combo.currentData() == "target":
+                self._set_auto_meter_target(
+                    self.auto_target_spin.value() * 1e3
+                )
+            else:
+                self._set_auto_meter_range(
+                    tone_hz,
+                    int(self.auto_null_combo.currentData()),
+                )
         else:
             self._direwolf_profile = None
             self._direwolf_profile_error = None
             self.direwolf_info_label.setStyleSheet("color: #b7bcc2;")
             self.direwolf_info_label.setText("Using the internal tone generator")
-            self._set_auto_meter_range(
-                self.auto_tone_spin.value() * 1e3,
-                int(self.auto_null_combo.currentData()),
-            )
+            if self.auto_method_combo.currentData() == "target":
+                self._set_auto_meter_target(
+                    self.auto_target_spin.value() * 1e3
+                )
+            else:
+                self._set_auto_meter_range(
+                    self.auto_tone_spin.value() * 1e3,
+                    int(self.auto_null_combo.currentData()),
+                )
         self._update_auto_control_state()
 
     def _on_auto_tone_changed(self) -> None:
@@ -2094,6 +2145,19 @@ class MainWindow(QMainWindow):
             hasattr(self, "xara_use_rig_check")
             and self.xara_use_rig_check.isChecked()
         )
+
+    def _on_xara_tone_changed(self, value: float) -> None:
+        if not hasattr(self, "auto_generator_combo"):
+            return
+        if self.auto_generator_combo.currentData() != "xara":
+            return
+        tone_hz = float(value)
+        self.auto_tone_spin.setValue(tone_hz / 1e3)
+        if self.auto_method_combo.currentData() != "target":
+            self._set_auto_meter_range(
+                tone_hz,
+                int(self.auto_null_combo.currentData()),
+            )
 
     def _on_xara_use_rig_changed(self, enabled: bool) -> None:
         self.xara_rig_port_spin.setEnabled(enabled)
@@ -2126,7 +2190,9 @@ class MainWindow(QMainWindow):
         else:
             rig_text = "freq manual"
         self.xara_info_label.setText(
-            f"VARA/xara command port · {endpoint} · modem PTT · {rig_text}"
+            f"VARA/xara command port · {endpoint} · "
+            f"TUNE {self.xara_tone_spin.value():.0f} Hz · modem PTT · "
+            f"{rig_text}"
         )
         self.xara_info_label.setStyleSheet(
             "color: #ffbf47;" if missing else "color: #b7bcc2;"
@@ -2137,7 +2203,9 @@ class MainWindow(QMainWindow):
             "is used only for frequency/mode checks; disable it and set the "
             "transmitter frequency manually if unavailable. Use your own SSH "
             "port forwarding if the command port is not directly reachable. "
-            "TUNE uses a 1500 Hz ALC test tone."
+            "TUNE uses the configured tone frequency; xara is verified at "
+            "1500 Hz, so verify the actual tone for VARA before trusting a "
+            "Bessel result."
         )
         self._update_auto_control_state()
 
@@ -2698,6 +2766,7 @@ class MainWindow(QMainWindow):
             return
         tone_hz, io, notes = prepared
         self._auto_run_notes = notes
+        self._clear_auto_outcome()
 
         if method == "target":
             self._auto_progress = None
@@ -2900,7 +2969,7 @@ class MainWindow(QMainWindow):
                 )
                 return None
             remote_xara = self._xara_is_remote()
-            tone_hz = XaraCalibration.tone_frequency_hz
+            tone_hz = self.xara_tone_spin.value()
             try:
                 adapter = XaraCalibration(
                     XaraConfig(
@@ -2908,6 +2977,7 @@ class MainWindow(QMainWindow):
                         port=command_port,
                         min_drive_db=-30.0,
                         max_drive_db=0.0,
+                        tone_frequency_hz=tone_hz,
                     )
                 )
             except XaraError as exc:
@@ -2950,6 +3020,7 @@ class MainWindow(QMainWindow):
         self._auto_run_generator = "internal"
         self._auto_run_rehearsal = True
         self._auto_run_notes = "Simulator rehearsal — no RF or saved hardware record"
+        self._clear_auto_outcome()
         self._direwolf_calibration = None
         self._xara_calibration = None
         self._auto_progress = None
@@ -3300,9 +3371,35 @@ class MainWindow(QMainWindow):
         if self._auto_run_method != "target":
             self._reset_bessel_display()
 
+    def _set_auto_outcome(self, text: str, color: str) -> None:
+        self.auto_outcome_label.setText(text)
+        self.auto_outcome_label.setStyleSheet(
+            f"border: none; color: {color}; font-weight: bold;"
+        )
+        self.auto_outcome_label.setVisible(bool(text))
+
+    def _clear_auto_outcome(self) -> None:
+        self.auto_outcome_label.clear()
+        self.auto_outcome_label.setVisible(False)
+        self.auto_progress.setValue(0)
+        self.auto_progress.setStyleSheet(
+            "QProgressBar { border: 1px solid #596575; background: #11171e; }"
+            "QProgressBar::chunk { background: #ffbf47; }"
+        )
+
+    def _set_auto_progress_failure(self) -> None:
+        self.auto_progress.setStyleSheet(
+            "QProgressBar { border: 1px solid #596575; background: #11171e; }"
+            "QProgressBar::chunk { background: #ff6868; }"
+        )
+
     def _render_auto_progress(self, progress: AutoCalProgress) -> None:
         self._auto_progress = progress
-        self.auto_progress.setValue(int(round(progress.fraction * 1000.0)))
+        self.auto_progress.setValue(
+            1000 if progress.state.terminal else int(round(progress.fraction * 1000.0))
+        )
+        if progress.state is AutoCalState.FAILED:
+            self._set_auto_progress_failure()
         self.auto_state_label.setText(progress.state.value)
         if progress.level is None:
             self.auto_level_label.setText("Level: —")
@@ -3358,13 +3455,32 @@ class MainWindow(QMainWindow):
             status = progress.captured.quality.status if progress.captured else None
             color = "#ffbf47" if status is ReadingStatus.MARGINAL else "#f5f5f5"
         self.auto_state_label.setStyleSheet(f"border: none; color: {color};")
+        if progress.state is AutoCalState.COMPLETE:
+            self._set_auto_outcome("AUTO-CAL COMPLETE — BESSEL NULL CAPTURED", "#f5f5f5")
+        elif progress.state is AutoCalState.FAILED:
+            self._set_auto_outcome(
+                f"AUTO-CAL FAILED — {progress.message}",
+                "#ff6868",
+            )
+        elif progress.state is AutoCalState.CANCELLED:
+            self._set_auto_outcome("AUTO-CAL CANCELLED", "#ffbf47")
+        else:
+            self.auto_outcome_label.setVisible(False)
         self.status_label.setText(f"AUTO-CAL · {progress.message}")
         self._update_auto_control_state()
 
     def _render_target_progress(self, progress: TargetCalProgress) -> None:
         self._target_progress = progress
-        self.auto_progress.setValue(int(round(progress.fraction * 1000.0)))
-        self.auto_state_label.setText(progress.state.value)
+        self.auto_progress.setValue(
+            1000 if progress.state.terminal else int(round(progress.fraction * 1000.0))
+        )
+        if progress.state is TargetCalState.FAILED:
+            self._set_auto_progress_failure()
+        state_text = progress.state.value
+        if progress.state is TargetCalState.FAILED:
+            if "above the maximum audio level" in progress.message:
+                state_text = "FAILED — INCREASE TX AUDIO"
+        self.auto_state_label.setText(state_text)
         if progress.level is None:
             self.auto_level_label.setText("Level: —")
         elif self._auto_run_generator == "xara":
@@ -3411,6 +3527,31 @@ class MainWindow(QMainWindow):
             )
             color = "#ffbf47" if status is ReadingStatus.MARGINAL else "#f5f5f5"
         self.auto_state_label.setStyleSheet(f"border: none; color: {color};")
+        if progress.state is TargetCalState.COMPLETE:
+            self._set_auto_outcome(
+                "TARGET CALIBRATION COMPLETE — TARGET REACHED",
+                "#f5f5f5",
+            )
+        elif progress.state is TargetCalState.FAILED:
+            if (
+                "above the maximum audio level" in progress.message
+                and progress.measured_hz is not None
+            ):
+                self._set_auto_outcome(
+                    "TARGET UNREACHABLE — MAX "
+                    f"{progress.measured_hz / 1000.0:.3f} kHz AT MAX DRIVE; "
+                    "INCREASE TX AUDIO OR LOWER TARGET",
+                    "#ff6868",
+                )
+            else:
+                self._set_auto_outcome(
+                    f"TARGET CALIBRATION FAILED — {progress.message}",
+                    "#ff6868",
+                )
+        elif progress.state is TargetCalState.CANCELLED:
+            self._set_auto_outcome("TARGET CALIBRATION CANCELLED", "#ffbf47")
+        else:
+            self.auto_outcome_label.setVisible(False)
         self.status_label.setText(f"TARGET-CAL · {progress.message}")
         self._update_auto_control_state()
 

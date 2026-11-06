@@ -20,6 +20,7 @@ class XaraConfig:
     min_drive_db: float = -30.0
     max_drive_db: float = 0.0
     timeout_s: float = 1.0
+    tone_frequency_hz: float = 1500.0
 
     def __post_init__(self) -> None:
         if not self.host or any(char.isspace() for char in self.host):
@@ -34,6 +35,11 @@ class XaraConfig:
             raise XaraError("xara drive range must satisfy -60 <= min < max <= 0")
         if not math.isfinite(self.timeout_s) or self.timeout_s <= 0.0:
             raise XaraError("xara timeout must be finite and positive")
+        if (
+            not math.isfinite(self.tone_frequency_hz)
+            or self.tone_frequency_hz <= 0.0
+        ):
+            raise XaraError("xara tone frequency must be finite and positive")
 
 
 class XaraClient:
@@ -244,6 +250,7 @@ class XaraCalibration:
         client_factory: Callable[..., XaraClient] = XaraClient,
     ) -> None:
         self.config = config
+        self.tone_frequency_hz = config.tone_frequency_hz
         self._client_factory = client_factory
         self._client: XaraClient | None = None
         self._drive_db: int | None = None

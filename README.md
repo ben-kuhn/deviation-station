@@ -389,9 +389,12 @@ The **Test** button connects and reads VERSION, TUNE state, and modem PTT
 status without starting TUNE or transmitting.
 
 xara permits one command client at a time. Close other command-port clients
-before calibration. The TUNE tone is treated as 1500 Hz; if a VARA build uses a
-different tone or a non-steady test waveform, a Bessel result from it is not
-valid. Verify before recording a result.
+before calibration. The TUNE tone is configurable; xara’s source/vectors
+specify **1500 Hz**, and that is the default. If a VARA build uses a different
+tone or a non-steady test waveform, set the actual tone and verify it before
+trusting a Bessel result. Target-deviation readings do not use the tone
+frequency for the deviation calculation, but still require a steady
+modulation source.
 
 #### Remote VARA/xara on the BBS
 

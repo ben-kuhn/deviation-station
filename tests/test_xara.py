@@ -165,3 +165,5 @@ def test_xara_config_rejects_bad_values() -> None:
         XaraConfig(min_drive_db=0.0, max_drive_db=0.0)
     with pytest.raises(XaraError):
         XaraConfig(max_drive_db=1.0)
+    with pytest.raises(XaraError):
+        XaraConfig(tone_frequency_hz=0.0)

@@ -29,6 +29,9 @@
 - Labels the port as the VARA command port (`--port`, not `--ui-port`). Added
   a non-transmitting **Test** action that checks VERSION, TUNE state, and
   modem PTT status.
+- Added a configurable VARA/xara TUNE tone frequency, defaulting to xara's
+  verified 1500 Hz. The actual tone matters for Bessel nulls; target deviation
+  calculations are tone-independent.
 - Remote rigctld setup now derives the host from the remote service host
   instead of requiring a separately configured host. The xara row exposes its
   own rigctld port; the shared remote port remains in SDR / Rig.

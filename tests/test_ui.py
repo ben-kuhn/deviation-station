@@ -8,6 +8,10 @@ from PyQt6.QtCore import QSettings  # noqa: E402
 from PyQt6.QtGui import QFontMetrics  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
+from deviation_meter.target_cal import (  # noqa: E402
+    TargetCalProgress,
+    TargetCalState,
+)
 from deviation_meter.ui import (  # noqa: E402
     DeviceDialog,
     DeviceSettings,
@@ -276,6 +280,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
     original_source = window.source_combo.currentData()
     original_host = window.xara_host_edit.text()
     original_port = window.xara_port_spin.value()
+    original_tone = window.xara_tone_spin.value()
     original_rig_port = window.xara_rig_port_spin.value()
     original_use_rig = window.xara_use_rig_check.isChecked()
     original_device = replace(window._device)
@@ -286,6 +291,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         )
         window.xara_host_edit.setText("bbs.local")
         window.xara_port_spin.setValue(8302)
+        window.xara_tone_spin.setValue(1750.0)
         window.xara_use_rig_check.setChecked(True)
         window.xara_rig_port_spin.setValue(4533)
         window._refresh_xara_info()
@@ -309,6 +315,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         assert adapter is not None
         assert adapter.config.host == "bbs.local"
         assert adapter.config.port == 8302
+        assert adapter.config.tone_frequency_hz == 1750.0
         assert window._xara_remote is True
         assert "VARA/xara TUNE" in prepared[2]
         window._xara_calibration = None
@@ -331,6 +338,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         )
         window.xara_host_edit.setText(original_host)
         window.xara_port_spin.setValue(original_port)
+        window.xara_tone_spin.setValue(original_tone)
         window.xara_rig_port_spin.setValue(original_rig_port)
         window.xara_use_rig_check.setChecked(original_use_rig)
         window._device = original_device
@@ -368,6 +376,34 @@ def test_vara_xara_ptt_is_modem_owned() -> None:
         assert window._ptt_keyed is False
         assert local_unkeys == []
         assert events == ["start:0.0", "stop"]
+    finally:
+        window.close()
+        app.processEvents()
+
+
+def test_target_failure_fills_progress_and_shows_audio_hint() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    try:
+        progress = TargetCalProgress(
+            state=TargetCalState.FAILED,
+            message=(
+                "Target calibration failed: target is above the maximum "
+                "audio level; reached 1758 Hz at maximum drive; raise TX "
+                "audio or lower the target"
+            ),
+            target_hz=2500.0,
+            level=1.0,
+            measured_hz=1758.0,
+            error_hz=-742.0,
+            fraction=0.6,
+        )
+        window._render_target_progress(progress)
+        assert window.auto_progress.value() == 1000
+        assert window.auto_state_label.text() == "FAILED — INCREASE TX AUDIO"
+        assert window.auto_outcome_label.isHidden() is False
+        assert "MAX 1.758 kHz" in window.auto_outcome_label.text()
+        assert "INCREASE TX AUDIO" in window.auto_outcome_label.text()
     finally:
         window.close()
         app.processEvents()
