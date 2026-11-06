@@ -18,8 +18,12 @@
   the modem: the application waits for command-port `PTT ON`/`PTT OFF`
   notifications instead of keying or verifying PTT through a separate
   rigctld. The external rigctld is used only for frequency/mode checks.
-- TUNE drive is not a PipeWire volume and is not persisted; it is applied via
-  the command port each run, and only the achieved calibration level is saved.
+- TUNE drive is not a PipeWire volume. It is applied via the command port each
+  run. xara persists a changed `drive-db` to its state settings on clean exit
+  when a state directory exists; the NixOS `driveDb` option is only the initial
+  default and can be overridden by that state file. The app never edits NixOS
+  or xara state, and calibration records store the achieved `auto_best_level`
+  and quantized `tune_drive_db`.
 - xara SSH now accepts an explicit SSH user, keeps the xara host editable, and
   labels the port as the VARA command port (`--port`, not `--ui-port`). Added a
   non-transmitting **Test** action that checks VERSION, TUNE state, and rigctld

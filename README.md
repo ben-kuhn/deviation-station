@@ -356,10 +356,25 @@ PTT is owned by the modem. The application waits for the modem’s `PTT ON` and
 `PTT OFF` command-port notifications instead of keying an external rigctld.
 `TUNE OFF` is sent at completion, cancellation, or timeout.
 
-The modem’s TUNE drive is **not** a PipeWire stream volume and is not stored by
-the application. It is applied through the command port each run; only the
-achieved calibration level is written to the result record. This is why Direct
-TCP works without SSH or PipeWire access.
+The modem’s TUNE drive is **not** a PipeWire stream volume. It is applied
+through the command port each run. xara persists a changed drive itself: when
+it exits cleanly and has a state directory, it writes `drive-db` into
+`<state-dir>/settings`. The NixOS module supplies a state directory
+(`~/.local/state/xara/<instance>` for the user-service example), so the NixOS
+`driveDb` is the initial default but the saved state value can override it on
+a later start. The application never edits the NixOS configuration or xara’s
+state file. Calibration records save the achieved `auto_best_level` and, for
+VARA/xara, the quantized `tune_drive_db` so the result is reproducible.
+
+Without a state directory, xara does not persist the runtime TUNE drive; a
+restart returns to `--drive-db`/the config default.
+
+For the BBS example, the FM xara instance uses command port **8302** and PTT
+rigctld **4533** (`driveDb = -3`); the HF instance uses **8300** and **4532**
+(`driveDb = -5`). The module’s command bind address defaults to `127.0.0.1`,
+so use the SSH tunnel unless the instance is deliberately changed to listen on
+a reachable address. Use the FM values for FM deviation work and select **FM
+wide** if the instance is configured as wide.
 
 The **Test** button connects and reads VERSION, TUNE state, and modem PTT
 status without starting TUNE or transmitting.

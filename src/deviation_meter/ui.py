@@ -2571,30 +2571,34 @@ class MainWindow(QMainWindow):
         progress: BesselProgress,
         *,
         notes: str,
+        device_extra: dict | None = None,
     ) -> None:
         if progress.captured is None:
             self.status_label.setText("No captured Bessel result to save")
             return
+        device = {
+            "device_args": self._device.device_args,
+            "sample_rate_hz": self._device.sample_rate_hz,
+            "center_frequency_hz": self._frequency_hz + self._device.lo_offset_hz,
+            "gain_db": self._device.gain_db,
+            "bandwidth_hz": self._device.bandwidth_hz,
+            "rig_host": self._device.rig_host,
+            "rig_port": self._device.rig_port,
+            "direwolf_remote": self._device.direwolf_remote,
+            "direwolf_ssh_host": self._device.direwolf_ssh_host,
+            "remote_rig_host": self._selected_rig_endpoint()[0],
+            "remote_rig_port": self._selected_rig_endpoint()[1],
+            "xara_transport": self.xara_transport_combo.currentData(),
+            "xara_remote": self._xara_is_remote(),
+        }
+        if device_extra:
+            device.update(device_extra)
         record = BesselVerificationRecord(
             receive_frequency_hz=self._frequency_hz,
             tone_frequency_hz=progress.tone_frequency_hz,
             null_index=progress.null_index,
             reading=progress.captured,
-            device={
-                "device_args": self._device.device_args,
-                "sample_rate_hz": self._device.sample_rate_hz,
-                "center_frequency_hz": self._frequency_hz + self._device.lo_offset_hz,
-                "gain_db": self._device.gain_db,
-                "bandwidth_hz": self._device.bandwidth_hz,
-                "rig_host": self._device.rig_host,
-                "rig_port": self._device.rig_port,
-                "direwolf_remote": self._device.direwolf_remote,
-                "direwolf_ssh_host": self._device.direwolf_ssh_host,
-                "remote_rig_host": self._selected_rig_endpoint()[0],
-                "remote_rig_port": self._selected_rig_endpoint()[1],
-                "xara_transport": self.xara_transport_combo.currentData(),
-                "xara_remote": self._xara_is_remote(),
-            },
+            device=device,
             audio_output=(
                 self._device.audio_output or TonePlayer.default_output_name()
             ),
@@ -2616,6 +2620,17 @@ class MainWindow(QMainWindow):
             progress,
             notes="Live Bessel carrier-null verification",
         )
+
+    def _auto_level_metadata(self, best_level: float | None) -> dict:
+        if best_level is None:
+            return {}
+        metadata: dict = {
+            "auto_source": self._auto_run_generator,
+            "auto_best_level": best_level,
+        }
+        if self._auto_run_generator == "xara":
+            metadata["tune_drive_db"] = round(-30.0 + 30.0 * best_level)
+        return metadata
 
     def _save_auto_verification(self) -> None:
         if self._auto_run_rehearsal:
@@ -2652,6 +2667,7 @@ class MainWindow(QMainWindow):
                     "remote_rig_port": self._selected_rig_endpoint()[1],
                     "xara_transport": self.xara_transport_combo.currentData(),
                     "xara_remote": self._xara_is_remote(),
+                    **self._auto_level_metadata(progress.best_level),
                 },
                 source=self._auto_run_generator,
                 audio_output=(
@@ -2690,6 +2706,7 @@ class MainWindow(QMainWindow):
         self._save_verification(
             progress.bessel,
             notes=notes,
+            device_extra=self._auto_level_metadata(progress.best_level),
         )
 
     def _start_auto_calibration(self) -> None:
