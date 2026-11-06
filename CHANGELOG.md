@@ -12,8 +12,12 @@
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
 - Remote xara TUNE can use direct TCP or an SSH local-port tunnel to the BBS
-  command port. The remote rigctld host follows the xara host or shared SSH
-  host; only its port is configured.
+  command port. The xara/SSH host is used for its rigctld endpoint; only the
+  remote rigctld port is configured.
+- xara SSH now accepts an explicit SSH user, keeps the xara host editable, and
+  labels the port as the VARA command port (`--port`, not `--ui-port`). Added a
+  non-transmitting **Test** action that checks VERSION, TUNE state, and rigctld
+  PTT readback.
 - Remote rigctld setup now derives the host from the remote service host
   instead of requiring a separately configured host. The xara row exposes its
   own rigctld port; the shared remote port remains in SDR / Rig.

@@ -251,7 +251,7 @@ def test_remote_and_reference_help_is_self_documented() -> None:
     )
     try:
         assert "BatchMode" in dialog.direwolf_ssh_host.toolTip()
-        assert "remote host" in dialog.remote_rig_port_spin.toolTip()
+        assert "Rigctld port" in dialog.remote_rig_port_spin.toolTip()
         assert "no SDR IQ" in dialog.direwolf_remote_note.text()
         assert "SSH forwarding" in dialog.direwolf_remote_note.toolTip()
         assert dialog.direwolf_remote_help_button.text() == (
@@ -284,13 +284,17 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         window.xara_transport_combo.setCurrentIndex(
             window.xara_transport_combo.findData("ssh")
         )
-        window.xara_host_edit.setText("127.0.0.1")
+        window.xara_host_edit.setText("bench-pi")
+        window.xara_ssh_user_edit.setText("ku0hn")
         window.xara_port_spin.setValue(8300)
         window.xara_rig_port_spin.setValue(4533)
-        window._device.direwolf_ssh_host = "bench-pi"
         window._refresh_xara_info()
         app.processEvents()
-        assert "SSH bench-pi" in window.xara_info_label.text()
+        assert window.xara_host_edit.isEnabled() is True
+        assert window.xara_host_label.text() == "SSH host"
+        assert window.xara_port_label.text() == "VARA cmd port"
+        assert "--ui-port" in window.xara_port_spin.toolTip()
+        assert "SSH ku0hn@bench-pi:8300" in window.xara_info_label.text()
         assert "rig bench-pi:4533" in window.xara_info_label.text()
         assert window._selected_rig_endpoint() == (
             "bench-pi",
@@ -309,8 +313,9 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         assert adapter.config.rig_port == 4533
         assert window._xara_remote is True
         assert window._xara_tunnel is not None
+        assert window._xara_tunnel.host == "ku0hn@bench-pi"
         assert window._xara_tunnel.active is False
-        assert "SSH bench-pi" in window._auto_run_notes or "SSH bench-pi" in prepared[2]
+        assert "SSH bench-pi" in window._auto_run_notes or "SSH ku0hn@bench-pi" in prepared[2]
         window._xara_tunnel = None
         window._xara_calibration = None
 
@@ -319,6 +324,7 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         )
         window.xara_host_edit.setText("bbs.local")
         window._refresh_xara_info()
+        assert window.xara_ssh_user_edit.isHidden() is True
         prepared = window._prepare_auto_io("xara", "bessel")
         assert prepared is not None
         adapter = window._xara_calibration

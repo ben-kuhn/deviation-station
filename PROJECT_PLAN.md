@@ -496,8 +496,8 @@ Assess xara's VARA-compatible control interface and calibration behavior. Reuse 
 a bounded calibration source. The adapter verifies PTT through `rigctld` and
 relies on xara’s automatic tune-off when the command client disconnects.
 Remote xara can use direct TCP or an SSH loopback port-forward for the command
-port. Its rigctld host follows the xara host or the shared SSH host; only the
-remote rigctld port is configured separately.
+port. Its rigctld host follows the xara/SSH host; only the remote rigctld port
+is configured separately.
 
 ### 9.7 QTSoundModem
 

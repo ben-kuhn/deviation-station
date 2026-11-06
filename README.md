@@ -346,11 +346,15 @@ xara --call YOURCALL --fm wide --radio \
   --port 8300 --kiss-port off
 ```
 
-Enter the xara command host and port in the Auto-Calibrate tab. The application
-connects to that command port, verifies the xara VERSION response, and uses
-`TUNE -30..0 dB` for level control. The 3–100% level range maps onto that drive
-range. `TUNE OFF` is sent at completion, and xara also stops tuning when the
-command connection closes.
+Enter the xara host and **VARA cmd port** in the Auto-Calibrate tab. This is
+xara's `--port` VARA-compatible command/API port (normally 8300), not its web
+UI `--ui-port`. The application connects to that command port, verifies the
+xara VERSION response, and uses `TUNE -30..0 dB` for level control. The 3–100%
+level range maps onto that drive range. `TUNE OFF` is sent at completion, and
+xara also stops tuning when the command connection closes.
+
+The xara row's **Test** button connects and reads VERSION/TUNE state and rigctld
+PTT readback without starting TUNE or transmitting.
 
 xara permits one command client at a time. Close other command-port clients
 before calibration. The xara TUNE tone is 1500 Hz and is not full-scale, so the
@@ -363,19 +367,18 @@ Auto-Calibrate, select xara and choose a transport:
 
 - **Direct TCP** — enter the BBS host and command port. xara must be started
   with `--addr` set to an address reachable from this machine.
-- **SSH tunnel** — leave xara bound to its default `127.0.0.1:8300`; the
-  application forwards the remote command port through the shared SSH host
-  from **SDR / Rig…**. This is the safer choice because the xara command port
-  is unauthenticated.
+- **SSH tunnel** — enter the BBS SSH host (and optional SSH user) in the xara
+  row and leave xara bound to its default `127.0.0.1:8300`; the application
+  forwards the VARA command port through that host. This is the safer choice
+  because the xara command port is unauthenticated.
 
-Remote xara derives the rigctld host from the xara host for direct TCP, or
-from the shared SSH host for the SSH tunnel. Use the **Rigctld port** field
-in the xara row to set the remote rigctld port. xara itself must use the same
-rigctld for PTT, for example:
+Remote xara derives the rigctld host from the xara/SSH host. Use the
+**Rigctld port** field in the xara row to set the remote rigctld port. xara
+itself must use the same rigctld for PTT, for example:
 
 ```bash
 xara --call YOURCALL --fm wide --radio \
-  --ptt rigctld:XARA_OR_SSH_HOST:4532 \
+  --ptt rigctld:XARA_HOST:4532 \
   --capture <pipewire-source> --playback <pipewire-sink> \
   --port 8300 --kiss-port off
 ```
