@@ -90,7 +90,7 @@ from .reference import (
     reference_for_profile,
 )
 from .rigctl import RigctldClient, RigctldError
-from .ssh import SshError, SshTunnel
+from .ssh import SshError
 from .target_cal import (
     TargetCalConfig,
     TargetCalController,
@@ -112,28 +112,25 @@ SOURCE_SIMULATOR = "simulator"
 SOURCE_LIVE = "live"
 
 _REMOTE_HELP_TEXT = (
-    "Remote SSH calibration covers Direwolf and VARA/xara. The SDR stays "
-    "local and must hear the remote transmitter over RF; no SDR IQ is sent "
-    "over SSH.\n\n"
-    "• SSH must work non-interactively with key authentication, for example "
-    "ssh -o BatchMode=yes host true.\n"
+    "Remote calibration covers Direwolf over SSH and VARA/xara over direct "
+    "TCP. The SDR stays local and must hear the remote transmitter over RF; "
+    "no SDR IQ is sent over SSH.\n\n"
+    "• SSH must work non-interactively with key authentication for Direwolf, "
+    "for example ssh -o BatchMode=yes host true.\n"
     "• Remote Direwolf requires direwolf, PipeWire, pw-dump, wpctl, timeout, "
     "and pgrep. The remote user's PipeWire session must be available.\n"
-    "• Remote VARA/xara can use direct TCP or an SSH tunnel to its command "
-    "port, which normally listens on 127.0.0.1:8300 on the BBS. It must "
-    "already be running. The VARA/xara host is also used for its remote "
-    "rigctld frequency endpoint.\n"
+    "• Remote VARA/xara uses its command port directly. It must already be "
+    "running and accept connections from this machine. If it is bound to "
+    "loopback, use your own SSH port forwarding and point the VARA/xara host "
+    "at the local forwarded address.\n"
     "• Direwolf config files are local templates. Their ADEVICE, ARATE, "
     "ACHANNELS, and MODEM values are uploaded; ADEVICE must exist remotely.\n"
     "• Stop any normal Direwolf instance on the remote host before starting.\n"
-    "• The remote rigctld host is derived from the remote service host: the "
-    "SSH host for remote Direwolf, or the VARA/xara host. Only its port is "
-    "configured separately. rigctld must listen on an address reachable from "
-    "the app and the remote service.\n"
-    "• Remote Direwolf owns PTT; VARA/xara PTT is owned by the modem. The "
-    "application verifies both through their respective control paths.\n"
-    "• SSH forwarding is not required for rigctld; it is used for remote "
-    "VARA/xara command traffic."
+    "• The remote Direwolf rigctld host is derived from the SSH host. The "
+    "VARA/xara rigctld host is the VARA/xara host. Only the rigctld port is "
+    "configured separately.\n"
+    "• Remote Direwolf owns PTT; VARA/xara PTT is owned by the modem.\n"
+    "• No built-in SSH tunnel is used for VARA/xara."
 )
 
 
@@ -1020,7 +1017,6 @@ class MainWindow(QMainWindow):
         self._direwolf_profile: DirewolfProfile | None = None
         self._direwolf_profile_error: str | None = None
         self._xara_calibration: XaraCalibration | None = None
-        self._xara_tunnel: SshTunnel | None = None
         self._xara_remote = False
         self._ptt_keyed = False
         self._frequency_hz = 443_457_000.0
@@ -1357,37 +1353,16 @@ class MainWindow(QMainWindow):
         xara_layout = QHBoxLayout()
         xara_layout.setContentsMargins(0, 0, 0, 0)
         xara_layout.setSpacing(6)
-        self.xara_transport_label = QLabel("Transport")
-        xara_layout.addWidget(self.xara_transport_label)
-        self.xara_transport_combo = QComboBox()
-        self.xara_transport_combo.addItem("Direct TCP", "direct")
-        self.xara_transport_combo.addItem("SSH tunnel", "ssh")
-        self.xara_transport_combo.setMinimumWidth(120)
-        self.xara_transport_combo.setToolTip(
-            "Direct TCP connects to the xara command port. SSH tunnel forwards "
-            "the remote loopback command port through the host entered beside "
-            "it."
-        )
-        xara_layout.addWidget(self.xara_transport_combo)
         self.xara_host_label = QLabel("VARA/xara host")
         xara_layout.addWidget(self.xara_host_label)
         self.xara_host_edit = QLineEdit("127.0.0.1")
-        self.xara_host_edit.setMinimumWidth(110)
+        self.xara_host_edit.setMinimumWidth(150)
         self.xara_host_edit.setToolTip(
-            "VARA/xara command host for Direct TCP, or the SSH destination for "
-            "the SSH tunnel. The remote rigctld host follows this same host."
+            "VARA/xara command host. The remote rigctld host follows this "
+            "same host. For SSH port forwarding, point this at the local "
+            "forwarded address."
         )
         xara_layout.addWidget(self.xara_host_edit)
-        self.xara_ssh_user_label = QLabel("SSH user")
-        self.xara_ssh_user_edit = QLineEdit()
-        self.xara_ssh_user_edit.setMinimumWidth(90)
-        self.xara_ssh_user_edit.setPlaceholderText("optional")
-        self.xara_ssh_user_edit.setToolTip(
-            "Optional SSH username for the VARA/xara tunnel. If blank, the "
-            "SSH config/default user is used."
-        )
-        xara_layout.addWidget(self.xara_ssh_user_label)
-        xara_layout.addWidget(self.xara_ssh_user_edit)
         self.xara_port_label = QLabel("VARA cmd port")
         xara_layout.addWidget(self.xara_port_label)
         self.xara_port_spin = QSpinBox()
@@ -1574,9 +1549,6 @@ class MainWindow(QMainWindow):
         )
         self.xara_host_edit.editingFinished.connect(self._refresh_xara_info)
         self.xara_port_spin.valueChanged.connect(self._refresh_xara_info)
-        self.xara_transport_combo.currentIndexChanged.connect(
-            self._on_xara_transport_changed
-        )
         self.start_button.clicked.connect(self._toggle_running)
         self.device_button.clicked.connect(self._edit_device)
         self.read_rig_button.clicked.connect(self._read_from_rig)
@@ -1710,14 +1682,10 @@ class MainWindow(QMainWindow):
             self.direwolf_info_label,
             self.xara_host_label,
             self.xara_host_edit,
-            self.xara_ssh_user_label,
-            self.xara_ssh_user_edit,
             self.xara_port_label,
             self.xara_port_spin,
             self.xara_rig_port_label,
             self.xara_rig_port_spin,
-            self.xara_transport_label,
-            self.xara_transport_combo,
             self.xara_test_button,
             self.xara_info_label,
             self.auto_safety_label,
@@ -1781,17 +1749,10 @@ class MainWindow(QMainWindow):
         self.xara_host_edit.setText(
             str(store.value("xara_host", "127.0.0.1"))
         )
-        self.xara_ssh_user_edit.setText(
-            str(store.value("xara_ssh_user", ""))
-        )
         self.xara_port_spin.setValue(int(store.value("xara_port", 8300)))
         self.xara_rig_port_spin.setValue(
             int(store.value("xara_rig_port", self._device.remote_rig_port))
         )
-        xara_transport = str(store.value("xara_transport", "direct"))
-        transport_index = self.xara_transport_combo.findData(xara_transport)
-        if transport_index >= 0:
-            self.xara_transport_combo.setCurrentIndex(transport_index)
         direwolf_tone = str(store.value("direwolf_tone", "mark"))
         tone_index = self.direwolf_tone_combo.findData(direwolf_tone)
         if tone_index >= 0:
@@ -1844,13 +1805,8 @@ class MainWindow(QMainWindow):
             self.direwolf_tone_combo.currentData(),
         )
         store.setValue("xara_host", self.xara_host_edit.text().strip())
-        store.setValue("xara_ssh_user", self.xara_ssh_user_edit.text().strip())
         store.setValue("xara_port", self.xara_port_spin.value())
         store.setValue("xara_rig_port", self.xara_rig_port_spin.value())
-        store.setValue(
-            "xara_transport",
-            self.xara_transport_combo.currentData(),
-        )
 
         store.setValue("meter_range", float(self.range_combo.currentData()))
         store.setValue("frequency_mhz", self._frequency_hz / 1e6)
@@ -2011,10 +1967,8 @@ class MainWindow(QMainWindow):
             self.direwolf_browse_button,
             self.direwolf_tone_combo,
             self.xara_host_edit,
-            self.xara_ssh_user_edit,
             self.xara_port_spin,
             self.xara_rig_port_spin,
-            self.xara_transport_combo,
             self.xara_test_button,
         ):
             control.setEnabled(not running)
@@ -2110,9 +2064,6 @@ class MainWindow(QMainWindow):
             )
 
     def _xara_is_remote(self) -> bool:
-        transport = str(self.xara_transport_combo.currentData())
-        if transport == "ssh":
-            return True
         host = self.xara_host_edit.text().strip().lower()
         return host not in {"", "127.0.0.1", "localhost", "::1"}
 
@@ -2123,42 +2074,17 @@ class MainWindow(QMainWindow):
             text = text.rsplit("@", 1)[1]
         return text
 
-    def _xara_ssh_destination(self) -> str:
-        host = self.xara_host_edit.text().strip()
-        if not host:
-            return ""
-        user = self.xara_ssh_user_edit.text().strip()
-        if user and "@" not in host:
-            return f"{user}@{host}"
-        return host
-
     def _xara_remote_rig_host(self) -> str:
         return self._ssh_destination_host(
             self.xara_host_edit.text().strip()
         )
 
-    def _on_xara_transport_changed(self) -> None:
-        transport = str(self.xara_transport_combo.currentData())
-        ssh = transport == "ssh"
-        self.xara_host_label.setText("SSH host" if ssh else "VARA/xara host")
-        self.xara_ssh_user_label.setVisible(ssh)
-        self.xara_ssh_user_edit.setVisible(ssh)
-        self.xara_host_edit.setEnabled(True)
-        self._refresh_xara_info()
-
     def _refresh_xara_info(self) -> None:
         if not hasattr(self, "xara_info_label"):
             return
-        transport = str(self.xara_transport_combo.currentData())
         port = self.xara_port_spin.value()
         host = self.xara_host_edit.text().strip()
-        if transport == "ssh":
-            destination = self._xara_ssh_destination()
-            endpoint = (
-                f"SSH {destination or '(set SSH host)'}:{port}"
-            )
-        else:
-            endpoint = f"VARA/xara {host or '(set host)'}:{port}"
+        endpoint = f"{host or '(set host)'}:{port}"
         if self._xara_is_remote():
             rig_host = self._xara_remote_rig_host()
             rig_text = (
@@ -2181,54 +2107,36 @@ class MainWindow(QMainWindow):
         self.xara_info_label.setToolTip(
             f"{endpoint} · {rig_text}. VARA/xara command port is --port "
             "(normally 8300), not --ui-port. PTT is owned by the modem; the "
-            "rigctld entry is used only for frequency/mode checks. SSH tunnel "
-            "forwards the loopback command port. TUNE uses a 1500 Hz ALC "
-            "test tone."
+            "rigctld entry is used only for frequency/mode checks. Use your "
+            "own SSH port forwarding if the command port is not directly "
+            "reachable. TUNE uses a 1500 Hz ALC test tone."
         )
         self._update_auto_control_state()
 
     def _test_xara_connection(self) -> None:
         if self._auto_running:
             return
-        transport = str(self.xara_transport_combo.currentData())
-        tunnel: SshTunnel | None = None
+        host = self.xara_host_edit.text().strip()
+        if not host:
+            self.status_label.setText("VARA/xara test: enter the host")
+            return
         client: XaraClient | None = None
         try:
-            if transport == "ssh":
-                destination = self._xara_ssh_destination()
-                if not destination:
-                    self.status_label.setText(
-                        "VARA/xara test: enter the SSH host"
-                    )
-                    return
-                tunnel = SshTunnel(
-                    destination,
-                    remote_port=self.xara_port_spin.value(),
-                )
-                tunnel.start()
-                host = "127.0.0.1"
-                port = tunnel.local_port
-            else:
-                host = self.xara_host_edit.text().strip()
-                if not host:
-                    self.status_label.setText(
-                        "VARA/xara test: enter the host"
-                    )
-                    return
-                port = self.xara_port_spin.value()
-            client = XaraClient(host, port, timeout_s=2.0)
+            client = XaraClient(
+                host,
+                self.xara_port_spin.value(),
+                timeout_s=2.0,
+            )
             client.connect()
             version = client.version()
             drive = client.tune_query()
             ptt = client.ptt
-        except (XaraError, SshError, OSError) as exc:
+        except (XaraError, OSError) as exc:
             self.status_label.setText(f"VARA/xara test failed: {exc}")
             return
         finally:
             if client is not None:
                 client.close()
-            if tunnel is not None:
-                tunnel.stop()
 
         if ptt is None:
             ptt_text = "not reported yet"
@@ -2588,7 +2496,6 @@ class MainWindow(QMainWindow):
             "direwolf_ssh_host": self._device.direwolf_ssh_host,
             "remote_rig_host": self._selected_rig_endpoint()[0],
             "remote_rig_port": self._selected_rig_endpoint()[1],
-            "xara_transport": self.xara_transport_combo.currentData(),
             "xara_remote": self._xara_is_remote(),
         }
         if device_extra:
@@ -2665,7 +2572,6 @@ class MainWindow(QMainWindow):
                     "direwolf_ssh_host": self._device.direwolf_ssh_host,
                     "remote_rig_host": self._selected_rig_endpoint()[0],
                     "remote_rig_port": self._selected_rig_endpoint()[1],
-                    "xara_transport": self.xara_transport_combo.currentData(),
                     "xara_remote": self._xara_is_remote(),
                     **self._auto_level_metadata(progress.best_level),
                 },
@@ -2878,7 +2784,6 @@ class MainWindow(QMainWindow):
         self._direwolf_calibration = None
         self._remote_direwolf_calibration = None
         self._xara_calibration = None
-        self._xara_tunnel = None
         self._xara_remote = False
         if generator == "direwolf":
             profile = self._direwolf_profile
@@ -2959,46 +2864,20 @@ class MainWindow(QMainWindow):
             )
             return tone_hz, _DirewolfAutoCalHardware(self, adapter), notes
         if generator == "xara":
-            transport = str(self.xara_transport_combo.currentData())
             host = self.xara_host_edit.text().strip()
             command_port = self.xara_port_spin.value()
-            ssh_host = self._xara_ssh_destination()
-            tunnel: SshTunnel | None = None
-            if transport == "ssh":
-                if not ssh_host:
-                    self.status_label.setText(
-                        "Enter the VARA/xara SSH host"
-                    )
-                    return None
-                try:
-                    tunnel = SshTunnel(ssh_host, remote_port=command_port)
-                except SshError as exc:
-                    self.status_label.setText(
-                        f"VARA/xara SSH tunnel settings: {exc}"
-                    )
-                    return None
-                xara_host = "127.0.0.1"
-                xara_port = tunnel.local_port
-                endpoint_text = (
-                    f"SSH {ssh_host}:{command_port}"
+            if not host:
+                self.status_label.setText(
+                    "Enter the VARA/xara command host"
                 )
-                remote_xara = True
-            else:
-                if not host:
-                    self.status_label.setText(
-                        "Enter the VARA/xara command host"
-                    )
-                    return None
-                xara_host = host
-                xara_port = command_port
-                endpoint_text = f"{host}:{command_port}"
-                remote_xara = self._xara_is_remote()
+                return None
+            remote_xara = self._xara_is_remote()
             tone_hz = XaraCalibration.tone_frequency_hz
             try:
                 adapter = XaraCalibration(
                     XaraConfig(
-                        host=xara_host,
-                        port=xara_port,
+                        host=host,
+                        port=command_port,
                         min_drive_db=-30.0,
                         max_drive_db=0.0,
                     )
@@ -3006,12 +2885,11 @@ class MainWindow(QMainWindow):
             except XaraError as exc:
                 self.status_label.setText(f"VARA/xara settings: {exc}")
                 return None
-            self._xara_tunnel = tunnel
             self._xara_remote = remote_xara
             self._xara_calibration = adapter
             notes = (
                 f"Auto-calibrated {purpose} via VARA/xara TUNE "
-                f"{tone_hz:g} Hz; command {endpoint_text}; "
+                f"{tone_hz:g} Hz; command {host}:{command_port}; "
                 "PTT via modem command port; "
                 "drive control is quantized to 1 dB"
             )
@@ -3285,14 +3163,9 @@ class MainWindow(QMainWindow):
         return True
 
     def _key_xara_calibration(self, adapter: XaraCalibration) -> bool:
-        tunnel = self._xara_tunnel
         try:
-            if tunnel is not None and not tunnel.active:
-                tunnel.start()
             adapter.start(0.0)
-        except (XaraError, SshError, OSError) as exc:
-            if tunnel is not None:
-                tunnel.stop()
+        except (XaraError, OSError) as exc:
             self.status_label.setText(f"VARA/xara start failed: {exc}")
             return False
         self._ptt_keyed = True
@@ -3310,10 +3183,6 @@ class MainWindow(QMainWindow):
             adapter.stop()
         except (XaraError, OSError, RuntimeError) as exc:
             cleanup_error = str(exc)
-        tunnel = self._xara_tunnel
-        self._xara_tunnel = None
-        if tunnel is not None:
-            tunnel.stop()
         self._ptt_timer.stop()
         self._ptt_keyed = False
         self._xara_remote = False
@@ -3385,10 +3254,6 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(f"VARA/xara cleanup failed: {exc}")
             self._ptt_timer.stop()
             self._ptt_keyed = False
-        tunnel = self._xara_tunnel
-        self._xara_tunnel = None
-        if tunnel is not None:
-            tunnel.stop()
         self._xara_remote = False
         self._ptt_timer.stop()
         self._ptt_keyed = False

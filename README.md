@@ -372,9 +372,9 @@ restart returns to `--drive-db`/the config default.
 For the BBS example, the FM xara instance uses command port **8302** and PTT
 rigctld **4533** (`driveDb = -3`); the HF instance uses **8300** and **4532**
 (`driveDb = -5`). The module’s command bind address defaults to `127.0.0.1`,
-so use the SSH tunnel unless the instance is deliberately changed to listen on
-a reachable address. Use the FM values for FM deviation work and select **FM
-wide** if the instance is configured as wide.
+so either change the instance address or run your own SSH port forward. Use the
+FM values for FM deviation work and select **FM wide** if the instance is
+configured as wide.
 
 The **Test** button connects and reads VERSION, TUNE state, and modem PTT
 status without starting TUNE or transmitting.
@@ -386,24 +386,27 @@ valid. Verify before recording a result.
 
 #### Remote VARA/xara on the BBS
 
-The VARA/xara TUNE source can run on the BBS while the SDR remains local. In
-Auto-Calibrate, select VARA/xara and choose a transport:
+The VARA/xara TUNE source can run on the BBS while the SDR remains local.
+Enter the BBS host and VARA command port directly. xara must be started with
+`--addr` set to an address reachable from this machine; VARA must accept
+command connections from this machine.
 
-- **Direct TCP** — enter the BBS host and VARA command port. xara must be
-  started with `--addr` set to an address reachable from this machine; VARA
-  must accept command connections from this machine.
-- **SSH tunnel** — enter the BBS SSH host (and optional SSH user) in the
-  VARA/xara row and leave xara bound to its default `127.0.0.1:8300`; the
-  application forwards the command port through that host. This is the safer
-  choice because the command port is unauthenticated.
+There is no built-in SSH transport. If the modem is bound to loopback, do the
+forwarding yourself, for example:
 
-Remote VARA/xara derives the frequency-control rigctld host from the
-VARA/xara/SSH host. Use the **Rigctld port** field in the row for frequency
-and mode checks. PTT remains owned by the modem.
+```bash
+ssh -N -L 8302:127.0.0.1:8302 -L 4533:127.0.0.1:4533 bbs
+```
 
-The local SDR must hear the BBS transmitter. Only command traffic crosses SSH;
-no SDR IQ is transported. The application verifies VERSION and modem PTT,
-controls `TUNE`, and sends `TUNE OFF` at completion.
+Then use `127.0.0.1:8302` as the VARA/xara command endpoint and configure the
+local rigctld settings for the forwarded rig port. PTT remains owned by the
+modem.
+
+Remote VARA/xara derives the frequency-control rigctld host from the VARA/xara
+host when it is a non-loopback address. Use the **Rigctld port** field in the
+row for frequency and mode checks.
+
+The local SDR must hear the BBS transmitter. No SDR IQ is transported.
 
 ### QtSoundModem — manual-assisted
 

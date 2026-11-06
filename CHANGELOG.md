@@ -11,9 +11,10 @@
 - Remote mode uses the selected Direwolf configuration as a local template;
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
-- Remote xara TUNE can use direct TCP or an SSH local-port tunnel to the BBS
-  command port. The xara/SSH host is used for its rigctld endpoint; only the
-  remote rigctld port is configured.
+- Remote VARA/xara TUNE uses its command port directly. The VARA/xara host is
+  used for its rigctld frequency endpoint; only the remote rigctld port is
+  configured. The built-in VARA/xara SSH tunnel was removed; users can run
+  their own SSH port forwarding.
 - Renamed the generator to **VARA/xara TUNE**. VARA/xara PTT is now owned by
   the modem: the application waits for command-port `PTT ON`/`PTT OFF`
   notifications instead of keying or verifying PTT through a separate
@@ -24,10 +25,9 @@
   default and can be overridden by that state file. The app never edits NixOS
   or xara state, and calibration records store the achieved `auto_best_level`
   and quantized `tune_drive_db`.
-- xara SSH now accepts an explicit SSH user, keeps the xara host editable, and
-  labels the port as the VARA command port (`--port`, not `--ui-port`). Added a
-  non-transmitting **Test** action that checks VERSION, TUNE state, and rigctld
-  PTT readback.
+- Labels the port as the VARA command port (`--port`, not `--ui-port`). Added
+  a non-transmitting **Test** action that checks VERSION, TUNE state, and
+  modem PTT status.
 - Remote rigctld setup now derives the host from the remote service host
   instead of requiring a separately configured host. The xara row exposes its
   own rigctld port; the shared remote port remains in SDR / Rig.

@@ -253,7 +253,7 @@ def test_remote_and_reference_help_is_self_documented() -> None:
         assert "BatchMode" in dialog.direwolf_ssh_host.toolTip()
         assert "Rigctld port" in dialog.remote_rig_port_spin.toolTip()
         assert "no SDR IQ" in dialog.direwolf_remote_note.text()
-        assert "SSH forwarding" in dialog.direwolf_remote_note.toolTip()
+        assert "SSH" in dialog.direwolf_remote_note.toolTip()
         assert dialog.direwolf_remote_help_button.text() == (
             "Remote requirements…"
         )
@@ -269,35 +269,33 @@ def test_remote_and_reference_help_is_self_documented() -> None:
         app.processEvents()
 
 
-def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
+def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     original_generator = window.auto_generator_combo.currentData()
     original_source = window.source_combo.currentData()
-    original_transport = window.xara_transport_combo.currentData()
+    original_host = window.xara_host_edit.text()
+    original_port = window.xara_port_spin.value()
+    original_rig_port = window.xara_rig_port_spin.value()
     original_device = replace(window._device)
     try:
         window.source_combo.setCurrentIndex(window.source_combo.findData("live"))
         window.auto_generator_combo.setCurrentIndex(
             window.auto_generator_combo.findData("xara")
         )
-        window.xara_transport_combo.setCurrentIndex(
-            window.xara_transport_combo.findData("ssh")
-        )
-        window.xara_host_edit.setText("bench-pi")
-        window.xara_ssh_user_edit.setText("ku0hn")
-        window.xara_port_spin.setValue(8300)
+        window.xara_host_edit.setText("bbs.local")
+        window.xara_port_spin.setValue(8302)
         window.xara_rig_port_spin.setValue(4533)
         window._refresh_xara_info()
         app.processEvents()
         assert window.xara_host_edit.isEnabled() is True
-        assert window.xara_host_label.text() == "SSH host"
+        assert window.xara_host_label.text() == "VARA/xara host"
         assert window.xara_port_label.text() == "VARA cmd port"
         assert "--ui-port" in window.xara_port_spin.toolTip()
-        assert "SSH ku0hn@bench-pi:8300" in window.xara_info_label.text()
-        assert "rig bench-pi:4533" in window.xara_info_label.text()
+        assert "bbs.local:8302" in window.xara_info_label.text()
+        assert "freq rig bbs.local:4533" in window.xara_info_label.text()
         assert window._selected_rig_endpoint() == (
-            "bench-pi",
+            "bbs.local",
             4533,
             True,
         )
@@ -307,33 +305,12 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         assert prepared is not None
         adapter = window._xara_calibration
         assert adapter is not None
-        assert adapter.config.host == "127.0.0.1"
-        assert adapter.config.port != 8300
-        assert window._xara_remote is True
-        assert window._xara_tunnel is not None
-        assert window._xara_tunnel.host == "ku0hn@bench-pi"
-        assert window._xara_tunnel.active is False
-        assert "SSH bench-pi" in window._auto_run_notes or "SSH ku0hn@bench-pi" in prepared[2]
-        window._xara_tunnel = None
-        window._xara_calibration = None
-
-        window.xara_transport_combo.setCurrentIndex(
-            window.xara_transport_combo.findData("direct")
-        )
-        window.xara_host_edit.setText("bbs.local")
-        window._refresh_xara_info()
-        assert window.xara_ssh_user_edit.isHidden() is True
-        prepared = window._prepare_auto_io("xara", "bessel")
-        assert prepared is not None
-        adapter = window._xara_calibration
-        assert adapter is not None
         assert adapter.config.host == "bbs.local"
-        assert window._xara_tunnel is None
+        assert adapter.config.port == 8302
+        assert window._xara_remote is True
+        assert "VARA/xara TUNE" in prepared[2]
         window._xara_calibration = None
     finally:
-        if window._xara_tunnel is not None:
-            window._xara_tunnel.stop()
-            window._xara_tunnel = None
         window._xara_calibration = None
         window.auto_generator_combo.setCurrentIndex(
             window.auto_generator_combo.findData(original_generator)
@@ -341,9 +318,9 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         window.source_combo.setCurrentIndex(
             window.source_combo.findData(original_source)
         )
-        window.xara_transport_combo.setCurrentIndex(
-            window.xara_transport_combo.findData(original_transport)
-        )
+        window.xara_host_edit.setText(original_host)
+        window.xara_port_spin.setValue(original_port)
+        window.xara_rig_port_spin.setValue(original_rig_port)
         window._device = original_device
         window.close()
         app.processEvents()
