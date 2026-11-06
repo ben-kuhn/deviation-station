@@ -8,8 +8,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .rigctl import RigctldClient, RigctldError
-
 
 class XaraError(RuntimeError):
     """Raised when the xara command port or TUNE state cannot be controlled."""
@@ -21,8 +19,6 @@ class XaraConfig:
     port: int = 8300
     min_drive_db: float = -30.0
     max_drive_db: float = 0.0
-    rig_host: str = "127.0.0.1"
-    rig_port: int = 4532
     timeout_s: float = 1.0
 
     def __post_init__(self) -> None:
@@ -30,14 +26,12 @@ class XaraConfig:
             raise XaraError("xara host must be non-empty and contain no spaces")
         if not 1 <= self.port <= 65535:
             raise XaraError("xara command port must be between 1 and 65535")
-        if not 1 <= self.rig_port <= 65535:
-            raise XaraError("rig port must be between 1 and 65535")
         if not (
             math.isfinite(self.min_drive_db)
             and math.isfinite(self.max_drive_db)
-            and -30.0 <= self.min_drive_db < self.max_drive_db <= 0.0
+            and -60.0 <= self.min_drive_db < self.max_drive_db <= 0.0
         ):
-            raise XaraError("xara drive range must satisfy -30 <= min < max <= 0")
+            raise XaraError("xara drive range must satisfy -60 <= min < max <= 0")
         if not math.isfinite(self.timeout_s) or self.timeout_s <= 0.0:
             raise XaraError("xara timeout must be finite and positive")
 
@@ -63,10 +57,15 @@ class XaraClient:
         self.timeout_s = float(timeout_s)
         self._socket: socket.socket | None = None
         self._buffer = b""
+        self._ptt: bool | None = None
 
     @property
     def connected(self) -> bool:
         return self._socket is not None
+
+    @property
+    def ptt(self) -> bool | None:
+        return self._ptt
 
     def connect(self) -> None:
         if self._socket is not None:
@@ -84,6 +83,7 @@ class XaraClient:
             ) from exc
         self._socket = connection
         self._buffer = b""
+        self._ptt = None
 
     _ASYNC_PREFIXES = (
         "BUSY ",
@@ -128,9 +128,14 @@ class XaraClient:
         if self._buffer.startswith(b"\n"):
             self._buffer = self._buffer[1:]
         try:
-            return raw.decode("ascii").strip()
+            line = raw.decode("ascii").strip()
         except UnicodeDecodeError as exc:
             raise XaraError("xara returned a non-ASCII response") from exc
+        if line == "PTT ON":
+            self._ptt = True
+        elif line == "PTT OFF":
+            self._ptt = False
+        return line
 
     def _read_response(self) -> str:
         for _ in range(32):
@@ -154,6 +159,36 @@ class XaraClient:
         except (OSError, UnicodeError) as exc:
             raise XaraError(f"xara command write failed: {exc}") from exc
         return self._read_response()
+
+    def wait_ptt(self, expected: bool, timeout_s: float = 2.0) -> bool:
+        """Wait for a modem-originated PTT ON/OFF notification."""
+
+        if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+            raise XaraError("PTT wait timeout must be finite and positive")
+        if self._socket is None:
+            raise XaraError("xara command port is not connected")
+        if self._ptt is expected:
+            return True
+        deadline = time.monotonic() + timeout_s
+        original_timeout = self._socket.gettimeout()
+        try:
+            while time.monotonic() < deadline:
+                self._socket.settimeout(
+                    max(0.05, deadline - time.monotonic())
+                )
+                try:
+                    self._read_line()
+                except XaraError as exc:
+                    if "timed out" not in str(exc):
+                        raise
+                if self._ptt is expected:
+                    return True
+        finally:
+            try:
+                self._socket.settimeout(original_timeout)
+            except OSError:
+                pass
+        return self._ptt is expected
 
     def version(self) -> str:
         response = self.command("VERSION")
@@ -198,7 +233,7 @@ class XaraClient:
 
 
 class XaraCalibration:
-    """Use an existing xara instance's TUNE mode as a calibration source."""
+    """Use an existing VARA/xara instance's TUNE mode as a source."""
 
     tone_frequency_hz = 1500.0
 
@@ -207,15 +242,9 @@ class XaraCalibration:
         config: XaraConfig,
         *,
         client_factory: Callable[..., XaraClient] = XaraClient,
-        ptt_on_verifier: Callable[[], bool] | None = None,
-        ptt_off_verifier: Callable[[], bool] | None = None,
-        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
         self.config = config
         self._client_factory = client_factory
-        self._ptt_on_verifier = ptt_on_verifier or self._default_ptt_on
-        self._ptt_off_verifier = ptt_off_verifier or self._default_ptt_off
-        self._sleeper = sleeper
         self._client: XaraClient | None = None
         self._drive_db: int | None = None
         self.version = ""
@@ -227,33 +256,6 @@ class XaraCalibration:
     @property
     def drive_db(self) -> int | None:
         return self._drive_db
-
-    def _default_ptt_on(self) -> bool:
-        client = RigctldClient(self.config.rig_host, self.config.rig_port)
-        last_error: str | None = None
-        for _ in range(10):
-            try:
-                if client.get_ptt():
-                    return True
-                last_error = "rigctld reports PTT off"
-            except RigctldError as exc:
-                last_error = str(exc)
-            self._sleeper(0.2)
-        raise XaraError(
-            f"xara did not key the transmitter: {last_error or 'PTT off'}"
-        )
-
-    def _default_ptt_off(self) -> bool:
-        client = RigctldClient(self.config.rig_host, self.config.rig_port)
-        for _ in range(10):
-            try:
-                if not client.get_ptt():
-                    return True
-                client.set_ptt(False)
-            except RigctldError:
-                pass
-            self._sleeper(0.2)
-        return False
 
     def _drive_for_level(self, level: float) -> int:
         if not math.isfinite(level) or not 0.0 <= level <= 1.0:
@@ -273,8 +275,10 @@ class XaraCalibration:
             client.connect()
             self.version = client.version()
             drive = client.tune(self._drive_for_level(level))
-            if not self._ptt_on_verifier():
-                raise XaraError("xara TUNE did not confirm PTT on")
+            if not client.wait_ptt(True):
+                raise XaraError(
+                    "modem did not report PTT ON after TUNE"
+                )
         except Exception:
             try:
                 client.tune_off()
@@ -300,16 +304,19 @@ class XaraCalibration:
         client = self._client
         self._client = None
         self._drive_db = None
+        if client is None:
+            return True
         error: str | None = None
-        if client is not None:
-            try:
-                client.tune_off()
-            except XaraError as exc:
-                error = str(exc)
-            finally:
-                client.close()
-        if not self._ptt_off_verifier():
-            raise XaraError(error or "xara did not confirm PTT off")
+        ptt_off = False
+        try:
+            client.tune_off()
+            ptt_off = client.wait_ptt(False)
+        except XaraError as exc:
+            error = str(exc)
+        finally:
+            client.close()
+        if not ptt_off:
+            raise XaraError(error or "modem did not confirm PTT OFF")
         if error:
             raise XaraError(error)
         return True

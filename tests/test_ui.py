@@ -309,8 +309,6 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         assert adapter is not None
         assert adapter.config.host == "127.0.0.1"
         assert adapter.config.port != 8300
-        assert adapter.config.rig_host == "bench-pi"
-        assert adapter.config.rig_port == 4533
         assert window._xara_remote is True
         assert window._xara_tunnel is not None
         assert window._xara_tunnel.host == "ku0hn@bench-pi"
@@ -330,8 +328,6 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         adapter = window._xara_calibration
         assert adapter is not None
         assert adapter.config.host == "bbs.local"
-        assert adapter.config.rig_host == "bbs.local"
-        assert adapter.config.rig_port == 4533
         assert window._xara_tunnel is None
         window._xara_calibration = None
     finally:
@@ -349,6 +345,41 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
             window.xara_transport_combo.findData(original_transport)
         )
         window._device = original_device
+        window.close()
+        app.processEvents()
+
+
+def test_vara_xara_ptt_is_modem_owned() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    events: list[str] = []
+    local_unkeys: list[str] = []
+
+    class FakeVaraXara:
+        def start(self, level):
+            events.append(f"start:{level}")
+            return -30
+
+        def stop(self):
+            events.append("stop")
+            return True
+
+        def set_level(self, level):
+            events.append(f"level:{level}")
+
+    adapter = FakeVaraXara()
+    try:
+        window._device.ptt_timeout_s = 20.0
+        window._unkey_ptt = lambda reason=None: local_unkeys.append(
+            reason or ""
+        ) or True
+        assert window._key_xara_calibration(adapter) is True
+        assert window._ptt_keyed is True
+        assert window._unkey_xara_calibration(adapter) is True
+        assert window._ptt_keyed is False
+        assert local_unkeys == []
+        assert events == ["start:0.0", "stop"]
+    finally:
         window.close()
         app.processEvents()
 

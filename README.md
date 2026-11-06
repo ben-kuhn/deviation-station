@@ -39,11 +39,11 @@ The measurement and internal-generator calibration foundation is implemented:
 - Guarded `rigctld` PTT with automatic unkey timeout
 - Guided Auto-Calibrate sweep with coarse search, null refinement, hold, and
   final capture using the internal tone generator, a Direwolf steady tone, or
-  xara TUNE
+  VARA/xara TUNE
 - Bounded PipeWire stream-volume control for the Direwolf calibration process
 - SSH remote-Direwolf calibration using remote PipeWire volume control and a
   remote `rigctld` PTT endpoint
-- xara command-port control for its 1500 Hz ALC test tone
+- VARA/xara command-port TUNE control for its 1500 Hz ALC test tone
 - Discriminator target-deviation control using the Generic FM profile
 - Hardware-free Bessel and target calibration rehearsals with the Simulator source
 - Persistent Bessel verification and discriminator target records, with
@@ -53,8 +53,8 @@ The measurement and internal-generator calibration foundation is implemented:
 - Network `rigctld` frequency read/write from the shared bottom bar
 
 The Auto-Calibrate tab supports the internal tone generator, Direwolf steady
-mark/space tones (local or remote over SSH), and xara TUNE. VARA and
-QTSoundModem adapters are not implemented yet.
+mark/space tones (local or remote over SSH), and VARA/xara command-port TUNE.
+QtSoundModem remains manual-assisted.
 
 ## Development on NixOS
 
@@ -299,7 +299,7 @@ In **SDR / Rig…**:
 The remote `rigctld` host is derived from the SSH host. It must be reachable
 from both this machine and the remote host; do not use a loopback SSH target
 unless both ends are the same machine. The local `rigctld` fields continue to
-control the manual tone/PTT path and local xara calibration.
+control the manual tone/PTT path and local VARA/xara calibration.
 
 Select a Direwolf configuration file in Auto-Calibrate as usual. In remote
 mode that file is a **local template**: the application reads its `ADEVICE`,
@@ -322,7 +322,7 @@ The application queries the remote rig frequency/mode and uses it for the
 preflight check when the remote Direwolf generator is selected. While that
 generator is selected, **Read from Rig** and **Link Rig Frequency** also use
 the remote rig endpoint; the local rig fields remain in use for manual and
-local xara calibration. Remote calibration requires the same FM-mode and
+local VARA/xara calibration. Remote calibration requires the same FM-mode and
 frequency-match rules as local calibration.
 
 If startup fails, check non-interactive SSH, the remote `PATH` for
@@ -336,8 +336,8 @@ remote host. A real remote-site test still needs to confirm RF reception, remote
 audio routing, PTT readback, and the remote timeout watchdog with the actual
 station.
 
-For **xara TUNE**, start xara separately with radio mode and `rigctld` PTT,
-for example:
+For **VARA/xara command-port TUNE**, start the modem separately with radio mode
+and PTT enabled. For xara, for example:
 
 ```bash
 xara --call YOURCALL --fm wide --radio \
@@ -346,60 +346,60 @@ xara --call YOURCALL --fm wide --radio \
   --port 8300 --kiss-port off
 ```
 
-Enter the xara host and **VARA cmd port** in the Auto-Calibrate tab. This is
-xara's `--port` VARA-compatible command/API port (normally 8300), not its web
-UI `--ui-port`. The application connects to that command port, verifies the
-xara VERSION response, and uses `TUNE -30..0 dB` for level control. The 3–100%
-level range maps onto that drive range. `TUNE OFF` is sent at completion, and
-xara also stops tuning when the command connection closes.
+Enter the VARA/xara host and **VARA cmd port** in Auto-Calibrate. This is the
+VARA-compatible command/API port (normally 8300), not the web UI `--ui-port`.
+The application connects to that port, verifies VERSION, and uses `TUNE` to set
+the modem’s internal drive and key PTT. The 3–100% level range maps to
+-30..0 dB.
 
-The xara row's **Test** button connects and reads VERSION/TUNE state and rigctld
-PTT readback without starting TUNE or transmitting.
+PTT is owned by the modem. The application waits for the modem’s `PTT ON` and
+`PTT OFF` command-port notifications instead of keying an external rigctld.
+`TUNE OFF` is sent at completion, cancellation, or timeout.
+
+The modem’s TUNE drive is **not** a PipeWire stream volume and is not stored by
+the application. It is applied through the command port each run; only the
+achieved calibration level is written to the result record. This is why Direct
+TCP works without SSH or PipeWire access.
+
+The **Test** button connects and reads VERSION, TUNE state, and modem PTT
+status without starting TUNE or transmitting.
 
 xara permits one command client at a time. Close other command-port clients
-before calibration. The xara TUNE tone is 1500 Hz and is not full-scale, so the
-radio’s data-input level may need to be raised to obtain a deep Bessel null.
+before calibration. The TUNE tone is treated as 1500 Hz; if a VARA build uses a
+different tone or a non-steady test waveform, a Bessel result from it is not
+valid. Verify before recording a result.
 
-#### Remote xara on the BBS
+#### Remote VARA/xara on the BBS
 
-The xara TUNE source can run on the BBS while the SDR remains local. In
-Auto-Calibrate, select xara and choose a transport:
+The VARA/xara TUNE source can run on the BBS while the SDR remains local. In
+Auto-Calibrate, select VARA/xara and choose a transport:
 
-- **Direct TCP** — enter the BBS host and command port. xara must be started
-  with `--addr` set to an address reachable from this machine.
-- **SSH tunnel** — enter the BBS SSH host (and optional SSH user) in the xara
-  row and leave xara bound to its default `127.0.0.1:8300`; the application
-  forwards the VARA command port through that host. This is the safer choice
-  because the xara command port is unauthenticated.
+- **Direct TCP** — enter the BBS host and VARA command port. xara must be
+  started with `--addr` set to an address reachable from this machine; VARA
+  must accept command connections from this machine.
+- **SSH tunnel** — enter the BBS SSH host (and optional SSH user) in the
+  VARA/xara row and leave xara bound to its default `127.0.0.1:8300`; the
+  application forwards the command port through that host. This is the safer
+  choice because the command port is unauthenticated.
 
-Remote xara derives the rigctld host from the xara/SSH host. Use the
-**Rigctld port** field in the xara row to set the remote rigctld port. xara
-itself must use the same rigctld for PTT, for example:
+Remote VARA/xara derives the frequency-control rigctld host from the
+VARA/xara/SSH host. Use the **Rigctld port** field in the row for frequency
+and mode checks. PTT remains owned by the modem.
 
-```bash
-xara --call YOURCALL --fm wide --radio \
-  --ptt rigctld:XARA_HOST:4532 \
-  --capture <pipewire-source> --playback <pipewire-sink> \
-  --port 8300 --kiss-port off
-```
+The local SDR must hear the BBS transmitter. Only command traffic crosses SSH;
+no SDR IQ is transported. The application verifies VERSION and modem PTT,
+controls `TUNE`, and sends `TUNE OFF` at completion.
 
-The local SDR must hear the BBS transmitter. Only xara command traffic crosses
-SSH; no SDR IQ is transported. The application verifies xara VERSION/PTT,
-controls `TUNE -30..0 dB`, and sends `TUNE OFF` at completion.
+### QtSoundModem — manual-assisted
 
-### VARA and QtSoundModem — manual-assisted
+VARA/xara command-port TUNE is the automated path when the modem and version
+expose compatible `TUNE` and `PTT ON/OFF` commands. If a VARA build does not,
+or its TUNE output is a VARA test waveform or AutoTune sequence rather than a
+steady single tone, use the manual fallback: its TUNE output is not valid for a
+Bessel measurement. QtSoundModem has no stable headless test-tone interface and
+remains manual-assisted.
 
-VARA HF 4.6.2 and newer added command-port `TUNE` commands (used by VarAC),
-so the xara adapter’s TUNE command shape may also work with newer VARA HF.
-Older VARA builds, VARA FM, exact tone frequency/waveform, PTT readback, and
-licensing/registration still need verification. If VARA’s TUNE output is a
-VARA test waveform or AutoTune sequence rather than a steady single tone, it is
-not valid for a Bessel measurement. VARA’s TUNE button and drive slider remain
-GUI controls, and ordinary AutoTune pings or traffic must not be treated as
-steady Bessel tones. QtSoundModem is likewise a GUI application without a stable
-headless test-tone interface.
-
-Use the **Measure** tab for these modems:
+Use the **Measure** tab for manual sources:
 
 1. Start the modem’s steady TUNE/test tone, initially at low drive.
 2. Select **Bessel J0**, set the actual tone frequency, and start the live SDR.
@@ -526,7 +526,7 @@ src/deviation_meter/
   simulator.py      Complex-baseband FM/4FSK signal generation
   target_cal.py     Discriminator target-deviation controller
   ui.py             PyQt6 measurement interface
-  xara.py           xara command-port TUNE control
+  xara.py           VARA/xara command-port TUNE control
   cli.py            Command-line interface
 tests/
 ```

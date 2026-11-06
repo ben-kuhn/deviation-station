@@ -46,6 +46,10 @@ class FakeXaraServer:
                     else:
                         response = "WRONG"
                     connection.sendall((response + "\r").encode("ascii"))
+                    if command.startswith("TUNE OFF"):
+                        connection.sendall(b"PTT OFF\r")
+                    elif command.startswith("TUNE "):
+                        connection.sendall(b"PTT ON\r")
 
     def close(self) -> None:
         self._stop.set()
@@ -64,8 +68,10 @@ def test_xara_client_controls_tune_and_drive() -> None:
         client.connect()
         assert client.version() == "VERSION VARA HF v4.9.0"
         assert client.tune(-12.4) == -12
+        assert client.wait_ptt(True) is True
         assert client.tune_query() == -12
         client.tune_off()
+        assert client.wait_ptt(False) is True
         server.close()
     finally:
         client.close()
@@ -84,6 +90,9 @@ class FakeClient:
         self.closed = False
         self.fail_connect = False
         self.fail_tune_off = False
+        self.ptt_state = False
+        self.ptt_on_result = True
+        self.ptt_off_result = True
 
     def connect(self) -> None:
         if self.fail_connect:
@@ -103,6 +112,14 @@ class FakeClient:
             raise XaraError("tune off failed")
         self.commands.append("TUNE OFF")
 
+    def wait_ptt(self, expected: bool, timeout_s: float = 2.0) -> bool:
+        del timeout_s
+        if expected:
+            self.ptt_state = self.ptt_on_result
+        else:
+            self.ptt_state = not self.ptt_off_result
+        return self.ptt_state is expected
+
     def close(self) -> None:
         self.closed = True
         self.connected = False
@@ -110,17 +127,14 @@ class FakeClient:
 
 def test_xara_calibration_maps_level_to_bounded_drive() -> None:
     client = FakeClient()
-    ptt = {"on": False, "off": True}
     calibration = XaraCalibration(
         XaraConfig(),
         client_factory=lambda *args, **kwargs: client,
-        ptt_on_verifier=lambda: ptt.update(on=True) or True,
-        ptt_off_verifier=lambda: ptt.update(off=True) or True,
-        sleeper=lambda seconds: None,
     )
 
     assert calibration.start(0.5) == -15
     assert client.commands == ["TUNE -15"]
+    assert client.ptt_state is True
     assert calibration.set_level(0.0) == -30
     assert calibration.set_level(1.0) == 0
     assert calibration.mute() == -30
@@ -131,19 +145,14 @@ def test_xara_calibration_maps_level_to_bounded_drive() -> None:
 
 def test_xara_calibration_unkeys_when_ptt_is_not_confirmed() -> None:
     client = FakeClient()
-
-    def no_ptt() -> bool:
-        raise XaraError("PTT off")
+    client.ptt_on_result = False
 
     calibration = XaraCalibration(
         XaraConfig(),
         client_factory=lambda *args, **kwargs: client,
-        ptt_on_verifier=no_ptt,
-        ptt_off_verifier=lambda: True,
-        sleeper=lambda seconds: None,
     )
 
-    with pytest.raises(XaraError, match="PTT off"):
+    with pytest.raises(XaraError, match="PTT ON"):
         calibration.start(0.0)
     assert "TUNE OFF" in client.commands
     assert client.closed is True

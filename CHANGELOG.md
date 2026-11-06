@@ -14,6 +14,12 @@
 - Remote xara TUNE can use direct TCP or an SSH local-port tunnel to the BBS
   command port. The xara/SSH host is used for its rigctld endpoint; only the
   remote rigctld port is configured.
+- Renamed the generator to **VARA/xara TUNE**. VARA/xara PTT is now owned by
+  the modem: the application waits for command-port `PTT ON`/`PTT OFF`
+  notifications instead of keying or verifying PTT through a separate
+  rigctld. The external rigctld is used only for frequency/mode checks.
+- TUNE drive is not a PipeWire volume and is not persisted; it is applied via
+  the command port each run, and only the achieved calibration level is saved.
 - xara SSH now accepts an explicit SSH user, keeps the xara host editable, and
   labels the port as the VARA command port (`--port`, not `--ui-port`). Added a
   non-transmitting **Test** action that checks VERSION, TUNE state, and rigctld
