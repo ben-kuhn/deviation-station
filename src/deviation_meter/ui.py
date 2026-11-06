@@ -125,9 +125,10 @@ _REMOTE_HELP_TEXT = (
     "• Direwolf config files are local templates. Their ADEVICE, ARATE, "
     "ACHANNELS, and MODEM values are uploaded; ADEVICE must exist remotely.\n"
     "• Stop any normal Direwolf instance on the remote host before starting.\n"
-    "• The shared remote rigctld host and port must be reachable from this "
-    "machine and from the remote host, and rigctld must listen on a reachable "
-    "address. Do not use 127.0.0.1 unless both ends are the same machine.\n"
+    "• The remote rigctld host is derived from the remote service host: the "
+    "SSH host for remote Direwolf and xara SSH, or the xara host for direct "
+    "remote xara. Only its port is configured separately. rigctld must "
+    "listen on an address reachable from the app and the remote service.\n"
     "• Remote Direwolf and xara own PTT; the application verifies PTT through "
     "the network and uses a remote timeout watchdog where applicable.\n"
     "• SSH forwarding is not required for rigctld; it is used for remote xara."
@@ -159,8 +160,7 @@ class DeviceSettings:
     rig_port: int = 4532
     direwolf_remote: bool = False
     direwolf_ssh_host: str = ""
-    direwolf_remote_rig_host: str = ""
-    direwolf_remote_rig_port: int = 4532
+    remote_rig_port: int = 4532
 
 
 class _AutoCalHardware:
@@ -923,33 +923,22 @@ class DeviceDialog(QDialog):
             "prompts are not supported."
         )
         form.addRow("SSH host", self.direwolf_ssh_host)
-        self.direwolf_remote_rig_host = QLineEdit(
-            settings.direwolf_remote_rig_host
+        self.remote_rig_port_spin = QSpinBox()
+        self.remote_rig_port_spin.setRange(1, 65535)
+        self.remote_rig_port_spin.setValue(settings.remote_rig_port)
+        self.remote_rig_port_spin.setToolTip(
+            "Rigctld port on the remote host. The host is the SSH host for "
+            "remote Direwolf and xara SSH, or the xara host for direct remote "
+            "xara."
         )
-        self.direwolf_remote_rig_host.setPlaceholderText(
-            "rigctld host reachable from this machine and the remote host"
-        )
-        self.direwolf_remote_rig_host.setToolTip(
-            "The remote rigctld is shared by remote Direwolf and remote xara. "
-            "It must be reachable from this machine and from the remote host. "
-            "Do not use 127.0.0.1 unless both ends are local."
-        )
-        form.addRow("Remote rigctld host", self.direwolf_remote_rig_host)
-        self.direwolf_remote_rig_port = QSpinBox()
-        self.direwolf_remote_rig_port.setRange(1, 65535)
-        self.direwolf_remote_rig_port.setValue(
-            settings.direwolf_remote_rig_port
-        )
-        self.direwolf_remote_rig_port.setToolTip(
-            "Port used by the shared remote rigctld for frequency and PTT "
-            "control."
-        )
-        form.addRow("Remote rigctld port", self.direwolf_remote_rig_port)
+        form.addRow("Remote rigctld port", self.remote_rig_port_spin)
         self.direwolf_remote_note = QLabel(
             "SSH control only; no SDR IQ. The local SDR must hear the remote "
-            "transmitter. These SSH/rig settings are shared by remote "
-            "Direwolf and remote xara. Direwolf config files are local "
-            "templates whose ADEVICE must exist remotely."
+            "transmitter. The SSH host is shared by remote Direwolf and "
+            "remote xara; the rigctld host follows that host or the direct "
+            "xara host. Only the rigctld port is configured here. Direwolf "
+            "config files are local templates whose ADEVICE must exist "
+            "remotely."
         )
         self.direwolf_remote_note.setWordWrap(True)
         self.direwolf_remote_note.setMinimumHeight(48)
@@ -995,10 +984,7 @@ class DeviceDialog(QDialog):
             rig_port=self.rig_port.value(),
             direwolf_remote=self.direwolf_remote.isChecked(),
             direwolf_ssh_host=self.direwolf_ssh_host.text().strip(),
-            direwolf_remote_rig_host=(
-                self.direwolf_remote_rig_host.text().strip()
-            ),
-            direwolf_remote_rig_port=self.direwolf_remote_rig_port.value(),
+            remote_rig_port=self.remote_rig_port_spin.value(),
         )
 
 
@@ -1081,11 +1067,11 @@ class MainWindow(QMainWindow):
                 store.value("direwolf_remote", False)
             ),
             direwolf_ssh_host=str(store.value("direwolf_ssh_host", "")),
-            direwolf_remote_rig_host=str(
-                store.value("direwolf_remote_rig_host", "")
-            ),
-            direwolf_remote_rig_port=int(
-                store.value("direwolf_remote_rig_port", 4532)
+            remote_rig_port=int(
+                store.value(
+                    "remote_rig_port",
+                    store.value("direwolf_remote_rig_port", 4532),
+                )
             ),
         )
 
@@ -1124,6 +1110,16 @@ class MainWindow(QMainWindow):
             "Ref… for all values."
         )
         controls.addWidget(self.profile_combo)
+        self.fm_mode_label = QLabel("FM mode")
+        controls.addWidget(self.fm_mode_label)
+        self.fm_mode_combo = QComboBox()
+        self.fm_mode_combo.addItem("Narrow", "narrow")
+        self.fm_mode_combo.addItem("Wide", "wide")
+        self.fm_mode_combo.setToolTip(
+            "Generic FM bandwidth reference and automatic target: narrowband "
+            "2.500 kHz or wideband 5.000 kHz peak deviation."
+        )
+        controls.addWidget(self.fm_mode_combo)
         self.source_label_widget = QLabel("Source")
         controls.addWidget(self.source_label_widget)
         self.source_combo = QComboBox()
@@ -1255,6 +1251,11 @@ class MainWindow(QMainWindow):
         self.auto_target_spin.setDecimals(3)
         self.auto_target_spin.setSuffix(" kHz")
         self.auto_target_spin.setValue(3.0)
+        self.auto_target_spin.setToolTip(
+            "Initial target follows the selected profile: M17 2.400 kHz, DMR "
+            "1.944 kHz, FM narrow 2.500 kHz, or FM wide 5.000 kHz. You can "
+            "edit it for a custom target."
+        )
         self.auto_tolerance_label = QLabel("Tolerance")
         self.auto_tolerance_spin = QDoubleSpinBox()
         self.auto_tolerance_spin.setRange(5.0, 500.0)
@@ -1385,6 +1386,17 @@ class MainWindow(QMainWindow):
             "forward this remote loopback port."
         )
         xara_layout.addWidget(self.xara_port_spin)
+        self.xara_rig_port_label = QLabel("Rigctld port")
+        xara_layout.addWidget(self.xara_rig_port_label)
+        self.xara_rig_port_spin = QSpinBox()
+        self.xara_rig_port_spin.setRange(1, 65535)
+        self.xara_rig_port_spin.setValue(self._device.remote_rig_port)
+        self.xara_rig_port_spin.setToolTip(
+            "Remote rigctld port. The rigctld host is the xara host for "
+            "direct TCP, or the shared SSH host for the SSH tunnel."
+        )
+        self.xara_rig_port_spin.valueChanged.connect(self._refresh_xara_info)
+        xara_layout.addWidget(self.xara_rig_port_spin)
         self.xara_info_label = QLabel(
             "Start xara with --radio and --ptt rigctld; TUNE uses 1500 Hz."
         )
@@ -1503,6 +1515,9 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
+        self.fm_mode_combo.currentIndexChanged.connect(
+            self._on_fm_mode_changed
+        )
         self.source_combo.currentIndexChanged.connect(self._on_source_changed)
         self.range_combo.currentIndexChanged.connect(self._on_range_changed)
         self.tone_spin.editingFinished.connect(self._on_bessel_settings_changed)
@@ -1619,6 +1634,8 @@ class MainWindow(QMainWindow):
             self.source_label_widget,
             self.range_label,
             self.profile_combo,
+            self.fm_mode_label,
+            self.fm_mode_combo,
             self.source_combo,
             self.range_combo,
             self.device_button,
@@ -1671,6 +1688,8 @@ class MainWindow(QMainWindow):
             self.xara_host_edit,
             self.xara_port_label,
             self.xara_port_spin,
+            self.xara_rig_port_label,
+            self.xara_rig_port_spin,
             self.xara_transport_label,
             self.xara_transport_combo,
             self.xara_info_label,
@@ -1701,6 +1720,10 @@ class MainWindow(QMainWindow):
         index = self.profile_combo.findData(profile)
         if index >= 0:
             self.profile_combo.setCurrentIndex(index)
+        fm_mode = str(store.value("fm_mode", "narrow"))
+        index = self.fm_mode_combo.findData(fm_mode)
+        if index >= 0:
+            self.fm_mode_combo.setCurrentIndex(index)
         source = str(store.value("source", SOURCE_SIMULATOR))
         index = self.source_combo.findData(source)
         if index >= 0:
@@ -1732,6 +1755,9 @@ class MainWindow(QMainWindow):
             str(store.value("xara_host", "127.0.0.1"))
         )
         self.xara_port_spin.setValue(int(store.value("xara_port", 8300)))
+        self.xara_rig_port_spin.setValue(
+            int(store.value("xara_rig_port", self._device.remote_rig_port))
+        )
         xara_transport = str(store.value("xara_transport", "direct"))
         transport_index = self.xara_transport_combo.findData(xara_transport)
         if transport_index >= 0:
@@ -1760,11 +1786,13 @@ class MainWindow(QMainWindow):
         self._update_mode_controls()
         self._on_auto_generator_changed()
         self._on_auto_method_changed()
+        self._sync_target_deviation()
         self._update_auto_control_state()
 
     def _save_ui_settings(self) -> None:
         store = self._settings_store
         store.setValue("profile", self.profile_combo.currentData())
+        store.setValue("fm_mode", self.fm_mode_combo.currentData())
         store.setValue("source", self.source_combo.currentData())
         store.setValue("mode", self.mode_combo.currentData())
         store.setValue("bessel_tone_khz", self.tone_spin.value())
@@ -1787,6 +1815,7 @@ class MainWindow(QMainWindow):
         )
         store.setValue("xara_host", self.xara_host_edit.text().strip())
         store.setValue("xara_port", self.xara_port_spin.value())
+        store.setValue("xara_rig_port", self.xara_rig_port_spin.value())
         store.setValue(
             "xara_transport",
             self.xara_transport_combo.currentData(),
@@ -1807,14 +1836,7 @@ class MainWindow(QMainWindow):
         store.setValue("rig_port", self._device.rig_port)
         store.setValue("direwolf_remote", self._device.direwolf_remote)
         store.setValue("direwolf_ssh_host", self._device.direwolf_ssh_host)
-        store.setValue(
-            "direwolf_remote_rig_host",
-            self._device.direwolf_remote_rig_host,
-        )
-        store.setValue(
-            "direwolf_remote_rig_port",
-            self._device.direwolf_remote_rig_port,
-        )
+        store.setValue("remote_rig_port", self._device.remote_rig_port)
 
     def _is_bessel_mode(self) -> bool:
         return self.mode_combo.currentData() == "bessel"
@@ -1828,10 +1850,19 @@ class MainWindow(QMainWindow):
         elif self._is_bessel_mode():
             self._reset_bessel_display()
 
+    def _update_fm_mode_visibility(self) -> None:
+        visible = (
+            not self._is_bessel_mode()
+            and self.profile_combo.currentData() == "generic-fm"
+        )
+        self.fm_mode_label.setVisible(visible)
+        self.fm_mode_combo.setVisible(visible)
+
     def _update_mode_controls(self) -> None:
         bessel = self._is_bessel_mode()
         self.profile_label.setVisible(not bessel)
         self.profile_combo.setVisible(not bessel)
+        self._update_fm_mode_visibility()
         self.bessel_bar.setVisible(bessel)
         self.bessel_status_label.setVisible(bessel)
         if bessel:
@@ -1901,22 +1932,20 @@ class MainWindow(QMainWindow):
             )
             if self._device.direwolf_remote:
                 generator_ready = generator_ready and bool(
-                    self._device.direwolf_ssh_host.strip()
-                    and self._device.direwolf_remote_rig_host.strip()
+                    self._ssh_destination_host(
+                        self._device.direwolf_ssh_host
+                    )
                 )
         elif generator == "xara":
             transport = str(self.xara_transport_combo.currentData())
             if transport == "ssh":
                 generator_ready = bool(
-                    self._device.direwolf_ssh_host.strip()
-                    and self._device.direwolf_remote_rig_host.strip()
+                    self._ssh_destination_host(
+                        self._device.direwolf_ssh_host
+                    )
                 )
             else:
                 generator_ready = bool(self.xara_host_edit.text().strip())
-                if self._xara_is_remote():
-                    generator_ready = generator_ready and bool(
-                        self._device.direwolf_remote_rig_host.strip()
-                    )
         self.auto_start_button.setEnabled(
             (live or rehearsal) and not running and generator_ready
         )
@@ -1956,6 +1985,7 @@ class MainWindow(QMainWindow):
             self.direwolf_tone_combo,
             self.xara_host_edit,
             self.xara_port_spin,
+            self.xara_rig_port_spin,
             self.xara_transport_combo,
         ):
             control.setEnabled(not running)
@@ -1985,6 +2015,11 @@ class MainWindow(QMainWindow):
             )
             self.auto_depth_label.setText(
                 f"Target: {target_hz / 1000.0:.3f} kHz"
+            )
+            self.auto_digital.set_target(
+                None,
+                target_hz=target_hz,
+                state="IDLE",
             )
             self.auto_detail_label.setText(
                 "Keys PTT, measures Generic FM deviation, and adjusts the "
@@ -2054,6 +2089,19 @@ class MainWindow(QMainWindow):
         host = self.xara_host_edit.text().strip().lower()
         return host not in {"", "127.0.0.1", "localhost", "::1"}
 
+    @staticmethod
+    def _ssh_destination_host(host: str) -> str:
+        text = host.strip()
+        if "@" in text:
+            text = text.rsplit("@", 1)[1]
+        return text
+
+    def _xara_remote_rig_host(self) -> str:
+        transport = str(self.xara_transport_combo.currentData())
+        if transport == "ssh":
+            return self._ssh_destination_host(self._device.direwolf_ssh_host)
+        return self.xara_host_edit.text().strip()
+
     def _on_xara_transport_changed(self) -> None:
         transport = str(self.xara_transport_combo.currentData())
         direct = transport == "direct"
@@ -2070,34 +2118,32 @@ class MainWindow(QMainWindow):
         if transport == "ssh":
             ssh_host = self._device.direwolf_ssh_host.strip()
             endpoint = (
-                f"SSH {ssh_host or '(set SSH host)'} → "
-                f"127.0.0.1:{port}"
+                f"SSH {ssh_host or '(set SSH host)'}:{port}"
             )
         else:
             endpoint = f"{self.xara_host_edit.text().strip() or '127.0.0.1'}:{port}"
         if self._xara_is_remote():
-            rig_host = self._device.direwolf_remote_rig_host.strip()
+            rig_host = self._xara_remote_rig_host()
             rig_text = (
-                f"rig {rig_host or '(set remote rig)'}:"
-                f"{self._device.direwolf_remote_rig_port}"
+                f"rig {rig_host or '(set host)'}:"
+                f"{self.xara_rig_port_spin.value()}"
             )
-            missing = (
-                (transport == "ssh" and not self._device.direwolf_ssh_host.strip())
-                or not rig_host
-            )
+            missing = not rig_host
         else:
             rig_text = (
                 f"rig {self._device.rig_host}:{self._device.rig_port}"
             )
             missing = False
+        self.xara_rig_port_spin.setEnabled(self._xara_is_remote())
         self.xara_info_label.setText(f"{endpoint} · {rig_text}")
         self.xara_info_label.setStyleSheet(
             "color: #ffbf47;" if missing else "color: #b7bcc2;"
         )
         self.xara_info_label.setToolTip(
-            f"{endpoint} · {rig_text}. xara TUNE uses a 1500 Hz ALC test tone "
-            "and drive from -30 to 0 dB. SSH tunnel uses the shared SSH host; "
-            "remote rig uses the shared remote rigctld from SDR / Rig."
+            f"{endpoint} · {rig_text}. SSH tunnel forwards the remote xara "
+            "loopback command port to a local port. xara TUNE uses a 1500 Hz "
+            "ALC test tone and drive from -30 to 0 dB. The rigctld host follows "
+            "the xara host, or the shared SSH host when tunneling."
         )
         self._update_auto_control_state()
 
@@ -2144,23 +2190,14 @@ class MainWindow(QMainWindow):
         )
         remote = self._device.direwolf_remote
         remote_host = self._device.direwolf_ssh_host.strip()
-        if remote and not remote_host:
+        remote_rig_host = self._ssh_destination_host(remote_host)
+        if remote and not remote_rig_host:
             self._direwolf_profile_error = (
                 "configure the remote Direwolf SSH host in SDR / Rig"
             )
             self.direwolf_info_label.setStyleSheet("color: #ffbf47;")
             self.direwolf_info_label.setText(
                 "Remote Direwolf is enabled but the SSH host is empty"
-            )
-            self._update_auto_control_state()
-            return
-        if remote and not self._device.direwolf_remote_rig_host.strip():
-            self._direwolf_profile_error = (
-                "configure the remote rigctld host in SDR / Rig"
-            )
-            self.direwolf_info_label.setStyleSheet("color: #ffbf47;")
-            self.direwolf_info_label.setText(
-                "Remote Direwolf is enabled but the rigctld host is empty"
             )
             self._update_auto_control_state()
             return
@@ -2175,6 +2212,7 @@ class MainWindow(QMainWindow):
         remote_note = (
             " Remote mode: the config file is a local template; its ADEVICE "
             "must exist on the remote host, and remote Direwolf must be stopped. "
+            f"Rigctld {remote_rig_host}:{self._device.remote_rig_port}. "
             f"{_REMOTE_HELP_TEXT}"
             if remote
             else ""
@@ -2449,8 +2487,8 @@ class MainWindow(QMainWindow):
                 "rig_port": self._device.rig_port,
                 "direwolf_remote": self._device.direwolf_remote,
                 "direwolf_ssh_host": self._device.direwolf_ssh_host,
-                "remote_rig_host": self._device.direwolf_remote_rig_host,
-                "remote_rig_port": self._device.direwolf_remote_rig_port,
+                "remote_rig_host": self._selected_rig_endpoint()[0],
+                "remote_rig_port": self._selected_rig_endpoint()[1],
                 "xara_transport": self.xara_transport_combo.currentData(),
                 "xara_remote": self._xara_is_remote(),
             },
@@ -2507,8 +2545,8 @@ class MainWindow(QMainWindow):
                     "rig_port": self._device.rig_port,
                     "direwolf_remote": self._device.direwolf_remote,
                     "direwolf_ssh_host": self._device.direwolf_ssh_host,
-                    "remote_rig_host": self._device.direwolf_remote_rig_host,
-                    "remote_rig_port": self._device.direwolf_remote_rig_port,
+                    "remote_rig_host": self._selected_rig_endpoint()[0],
+                    "remote_rig_port": self._selected_rig_endpoint()[1],
                     "xara_transport": self.xara_transport_combo.currentData(),
                     "xara_remote": self._xara_is_remote(),
                 },
@@ -2584,13 +2622,7 @@ class MainWindow(QMainWindow):
             )
             return
         generator = str(self.auto_generator_combo.currentData())
-        remote_direwolf = (
-            self._device.direwolf_remote and generator == "direwolf"
-        )
-        remote_xara = generator == "xara" and self._xara_is_remote()
-        frequency = self._prepare_auto_frequency(
-            remote=remote_direwolf or remote_xara
-        )
+        frequency = self._prepare_auto_frequency()
         if frequency is None:
             return
         self._frequency_hz = frequency
@@ -2744,9 +2776,7 @@ class MainWindow(QMainWindow):
                 return None
             if self._device.direwolf_remote:
                 ssh_host = self._device.direwolf_ssh_host.strip()
-                remote_rig_host = (
-                    self._device.direwolf_remote_rig_host.strip()
-                )
+                remote_rig_host = self._ssh_destination_host(ssh_host)
                 if not ssh_host:
                     self.status_label.setText(
                         "Configure the remote Direwolf SSH host in SDR / Rig"
@@ -2754,7 +2784,7 @@ class MainWindow(QMainWindow):
                     return None
                 if not remote_rig_host:
                     self.status_label.setText(
-                        "Configure the remote rigctld host in SDR / Rig"
+                        "Configure the remote Direwolf SSH host in SDR / Rig"
                     )
                     return None
                 try:
@@ -2767,7 +2797,7 @@ class MainWindow(QMainWindow):
                             tone=tone,
                             remote_rig_host=remote_rig_host,
                             remote_rig_port=(
-                                self._device.direwolf_remote_rig_port
+                                self._device.remote_rig_port
                             ),
                             max_duration_s=max(
                                 5.0,
@@ -2786,7 +2816,7 @@ class MainWindow(QMainWindow):
                     f"{profile.baud} baud {tone} tone {tone_hz:g} Hz on "
                     f"{ssh_host}; ADEVICE {profile.audio_device}; "
                     f"remote PTT {remote_rig_host}:"
-                    f"{self._device.direwolf_remote_rig_port}"
+                    f"{self._device.remote_rig_port}"
                 )
                 return (
                     tone_hz,
@@ -2841,17 +2871,14 @@ class MainWindow(QMainWindow):
                 endpoint_text = f"{host}:{command_port}"
                 remote_xara = self._xara_is_remote()
             if remote_xara:
-                remote_rig_host = (
-                    self._device.direwolf_remote_rig_host.strip()
-                )
-                if not remote_rig_host:
+                rig_host = self._xara_remote_rig_host()
+                if not rig_host:
                     self.status_label.setText(
-                        "Configure the shared remote rigctld host in SDR / Rig "
-                        "for remote xara"
+                        "Configure the xara host or shared SSH host in SDR / "
+                        "Rig for remote xara"
                     )
                     return None
-                rig_host = remote_rig_host
-                rig_port = self._device.direwolf_remote_rig_port
+                rig_port = self.xara_rig_port_spin.value()
             else:
                 rig_host = self._device.rig_host
                 rig_port = self._device.rig_port
@@ -3052,24 +3079,19 @@ class MainWindow(QMainWindow):
                 return
         self.auto_meter.set_range_hz(10_000.0)
 
-    def _prepare_auto_frequency(self, *, remote: bool = False) -> float | None:
+    def _prepare_auto_frequency(self) -> float | None:
         try:
             requested = self._desired_frequency_hz()
         except ValueError as exc:
             self.status_label.setText(f"Frequency error: {exc}")
             return None
-        if remote:
-            rig_host = self._device.direwolf_remote_rig_host.strip()
-            rig_port = self._device.direwolf_remote_rig_port
-            if not rig_host:
-                self.status_label.setText(
-                    "Configure the remote rigctld host in SDR / Rig before "
-                    "remote Direwolf calibration"
-                )
-                return None
-        else:
-            rig_host = self._device.rig_host
-            rig_port = self._device.rig_port
+        rig_host, rig_port, remote = self._selected_rig_endpoint()
+        if remote and not rig_host:
+            self.status_label.setText(
+                "Configure the remote host in SDR / Rig before remote "
+                "calibration"
+            )
+            return None
         client = RigctldClient(rig_host, rig_port)
         try:
             mode, _ = client.get_mode()
@@ -3450,6 +3472,30 @@ class MainWindow(QMainWindow):
             "dmr": "mmdvm-dmr",
         }.get(profile_id, profile_id)
 
+    def _mode_target_hz(self) -> float:
+        profile_id = str(self.profile_combo.currentData())
+        if profile_id == "m17":
+            return 2400.0
+        if profile_id == "dmr":
+            return 1944.0
+        if profile_id == "generic-fm":
+            return (
+                5000.0
+                if self.fm_mode_combo.currentData() == "wide"
+                else 2500.0
+            )
+        return 3000.0
+
+    def _sync_target_deviation(self) -> None:
+        if not hasattr(self, "auto_target_spin"):
+            return
+        target_hz = self._mode_target_hz()
+        self.auto_target_spin.blockSignals(True)
+        self.auto_target_spin.setValue(target_hz / 1e3)
+        self.auto_target_spin.blockSignals(False)
+        if self.auto_method_combo.currentData() == "target":
+            self._set_auto_meter_target(target_hz)
+
     def _update_measurement_reference(self) -> None:
         if not hasattr(self, "digital"):
             return
@@ -3481,9 +3527,17 @@ class MainWindow(QMainWindow):
     def _on_profile_changed(self) -> None:
         if self._auto_running:
             self._cancel_auto_calibration("cancelled by profile change")
+        self._update_fm_mode_visibility()
+        self._sync_target_deviation()
         self._update_measurement_reference()
         if self._session is not None and self._session.running:
             self.start_measurement()
+
+    def _on_fm_mode_changed(self) -> None:
+        if self._auto_running:
+            self._cancel_auto_calibration("cancelled by FM mode change")
+        self._sync_target_deviation()
+        self._update_measurement_reference()
 
     def _on_source_changed(self) -> None:
         if self._auto_running:
@@ -3526,24 +3580,16 @@ class MainWindow(QMainWindow):
 
     def _selected_rig_endpoint(self) -> tuple[str, int, bool]:
         generator = str(self.auto_generator_combo.currentData())
-        if (
-            generator == "xara"
-            and self._xara_is_remote()
-            and self._device.direwolf_remote_rig_host.strip()
-        ):
+        if generator == "xara" and self._xara_is_remote():
             return (
-                self._device.direwolf_remote_rig_host.strip(),
-                self._device.direwolf_remote_rig_port,
+                self._xara_remote_rig_host(),
+                self.xara_rig_port_spin.value(),
                 True,
             )
-        if (
-            self._device.direwolf_remote
-            and generator == "direwolf"
-            and self._device.direwolf_remote_rig_host.strip()
-        ):
+        if self._device.direwolf_remote and generator == "direwolf":
             return (
-                self._device.direwolf_remote_rig_host.strip(),
-                self._device.direwolf_remote_rig_port,
+                self._ssh_destination_host(self._device.direwolf_ssh_host),
+                self._device.remote_rig_port,
                 True,
             )
         return self._device.rig_host, self._device.rig_port, False

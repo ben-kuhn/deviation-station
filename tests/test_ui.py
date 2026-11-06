@@ -121,20 +121,18 @@ def test_remote_direwolf_requires_ssh_and_remote_rig(tmp_path) -> None:
         window.direwolf_config_edit.setText(str(config))
         window._device.direwolf_remote = True
         window._device.direwolf_ssh_host = ""
-        window._device.direwolf_remote_rig_host = ""
         window._refresh_direwolf_info()
         assert window._direwolf_profile_error is not None
         assert "SSH host" in window._direwolf_profile_error
         assert window.auto_start_button.isEnabled() is False
 
         window._device.direwolf_ssh_host = "bench-pi"
-        window._device.direwolf_remote_rig_host = "station.local"
         window._refresh_direwolf_info()
         assert window._direwolf_profile_error is None
         assert "REMOTE bench-pi" in window.direwolf_info_label.text()
         assert window.auto_start_button.isEnabled() is True
         assert window._selected_rig_endpoint() == (
-            "station.local",
+            "bench-pi",
             4532,
             True,
         )
@@ -142,7 +140,7 @@ def test_remote_direwolf_requires_ssh_and_remote_rig(tmp_path) -> None:
         assert prepared is not None
         adapter = window._remote_direwolf_calibration
         assert adapter is not None
-        assert adapter.config.remote_rig_host == "station.local"
+        assert adapter.config.remote_rig_host == "bench-pi"
         assert adapter.config.max_duration_s == 23.0
         window._remote_direwolf_calibration = None
     finally:
@@ -248,12 +246,12 @@ def test_remote_and_reference_help_is_self_documented() -> None:
         DeviceSettings(
             direwolf_remote=True,
             direwolf_ssh_host="bench-pi",
-            direwolf_remote_rig_host="station.local",
+            remote_rig_port=4532,
         )
     )
     try:
         assert "BatchMode" in dialog.direwolf_ssh_host.toolTip()
-        assert "127.0.0.1" in dialog.direwolf_remote_rig_host.toolTip()
+        assert "remote host" in dialog.remote_rig_port_spin.toolTip()
         assert "no SDR IQ" in dialog.direwolf_remote_note.text()
         assert "SSH forwarding" in dialog.direwolf_remote_note.toolTip()
         assert dialog.direwolf_remote_help_button.text() == (
@@ -288,16 +286,15 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         )
         window.xara_host_edit.setText("127.0.0.1")
         window.xara_port_spin.setValue(8300)
+        window.xara_rig_port_spin.setValue(4533)
         window._device.direwolf_ssh_host = "bench-pi"
-        window._device.direwolf_remote_rig_host = "station.local"
-        window._device.direwolf_remote_rig_port = 4532
         window._refresh_xara_info()
         app.processEvents()
         assert "SSH bench-pi" in window.xara_info_label.text()
-        assert "rig station.local:4532" in window.xara_info_label.text()
+        assert "rig bench-pi:4533" in window.xara_info_label.text()
         assert window._selected_rig_endpoint() == (
-            "station.local",
-            4532,
+            "bench-pi",
+            4533,
             True,
         )
         assert window.auto_start_button.isEnabled() is True
@@ -308,7 +305,8 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         assert adapter is not None
         assert adapter.config.host == "127.0.0.1"
         assert adapter.config.port != 8300
-        assert adapter.config.rig_host == "station.local"
+        assert adapter.config.rig_host == "bench-pi"
+        assert adapter.config.rig_port == 4533
         assert window._xara_remote is True
         assert window._xara_tunnel is not None
         assert window._xara_tunnel.active is False
@@ -326,7 +324,8 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
         adapter = window._xara_calibration
         assert adapter is not None
         assert adapter.config.host == "bbs.local"
-        assert adapter.config.rig_host == "station.local"
+        assert adapter.config.rig_host == "bbs.local"
+        assert adapter.config.rig_port == 4533
         assert window._xara_tunnel is None
         window._xara_calibration = None
     finally:
@@ -344,6 +343,73 @@ def test_remote_xara_uses_shared_ssh_and_rig(tmp_path) -> None:
             window.xara_transport_combo.findData(original_transport)
         )
         window._device = original_device
+        window.close()
+        app.processEvents()
+
+
+def test_target_deviation_follows_mode() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    original_method = window.auto_method_combo.currentData()
+    original_profile = window.profile_combo.currentData()
+    original_fm_mode = window.fm_mode_combo.currentData()
+    original_mode = window.mode_combo.currentData()
+    try:
+        window.mode_combo.setCurrentIndex(
+            window.mode_combo.findData("digital")
+        )
+        window.auto_method_combo.setCurrentIndex(
+            window.auto_method_combo.findData("target")
+        )
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("m17")
+        )
+        app.processEvents()
+        assert window.auto_target_spin.value() == pytest.approx(2.400)
+
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("dmr")
+        )
+        app.processEvents()
+        assert window.auto_target_spin.value() == pytest.approx(1.944)
+
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("generic-fm")
+        )
+        window.fm_mode_combo.setCurrentIndex(
+            window.fm_mode_combo.findData("narrow")
+        )
+        app.processEvents()
+        assert window.fm_mode_combo.isHidden() is False
+        assert window.auto_target_spin.value() == pytest.approx(2.500)
+
+        window.fm_mode_combo.setCurrentIndex(
+            window.fm_mode_combo.findData("wide")
+        )
+        app.processEvents()
+        assert window.auto_target_spin.value() == pytest.approx(5.000)
+
+        window.auto_target_spin.setValue(3.300)
+        assert window.auto_target_spin.value() == pytest.approx(3.300)
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData("m17")
+        )
+        app.processEvents()
+        assert window.auto_target_spin.value() == pytest.approx(2.400)
+        assert window.fm_mode_combo.isHidden() is True
+    finally:
+        window.auto_method_combo.setCurrentIndex(
+            window.auto_method_combo.findData(original_method)
+        )
+        window.profile_combo.setCurrentIndex(
+            window.profile_combo.findData(original_profile)
+        )
+        window.fm_mode_combo.setCurrentIndex(
+            window.fm_mode_combo.findData(original_fm_mode)
+        )
+        window.mode_combo.setCurrentIndex(
+            window.mode_combo.findData(original_mode)
+        )
         window.close()
         app.processEvents()
 

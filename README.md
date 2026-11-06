@@ -156,6 +156,7 @@ The measure screen provides:
 - White-on-dark analog deviation meter
 - Large digital outer-symbol deviation readout
 - Active-profile nominal deviation reference and amber meter marks
+- Generic FM narrow/wide selection and automatic target deviation
 - **Deviation Ref…** dialog with M17, DMR, analog FM, and Bessel references
 - M17/DMR profile selection
 - Live scrolling waterfall
@@ -223,7 +224,9 @@ The **Auto-Calibrate** tab supports two methods:
 
 - **Bessel null** — finds and captures a selected \(J_0\) carrier null.
 - **Target deviation** — adjusts the audio level until the Generic FM
-  discriminator reading reaches a target and tolerance.
+  discriminator reading reaches a target and tolerance. The target follows the
+  selected mode automatically: M17 2.400 kHz, DMR 1.944 kHz, FM narrow
+  2.500 kHz, or FM wide 5.000 kHz. It remains editable for custom targets.
 
 For either method:
 
@@ -291,12 +294,12 @@ In **SDR / Rig…**:
 
 1. Enable **Run Direwolf on a remote host via SSH**.
 2. Enter the SSH host or `~/.ssh/config` alias.
-3. Enter the remote `rigctld` host and port.
+3. Enter the remote `rigctld` **port**.
 
-The remote `rigctld` host must be reachable from both this machine and the
-remote host. Do not use `127.0.0.1` unless both the application and `rigctld`
-run on the same machine. The local `rigctld` fields continue to control the
-manual tone/PTT path and the internal/xara generators.
+The remote `rigctld` host is derived from the SSH host. It must be reachable
+from both this machine and the remote host; do not use a loopback SSH target
+unless both ends are the same machine. The local `rigctld` fields continue to
+control the manual tone/PTT path and local xara calibration.
 
 Select a Direwolf configuration file in Auto-Calibrate as usual. In remote
 mode that file is a **local template**: the application reads its `ADEVICE`,
@@ -365,12 +368,14 @@ Auto-Calibrate, select xara and choose a transport:
   from **SDR / Rig…**. This is the safer choice because the xara command port
   is unauthenticated.
 
-Remote xara reuses the shared remote `rigctld` host and port from **SDR /
-Rig…**. xara itself must use the same rigctld for PTT, for example:
+Remote xara derives the rigctld host from the xara host for direct TCP, or
+from the shared SSH host for the SSH tunnel. Use the **Rigctld port** field
+in the xara row to set the remote rigctld port. xara itself must use the same
+rigctld for PTT, for example:
 
 ```bash
 xara --call YOURCALL --fm wide --radio \
-  --ptt rigctld:REMOTE_RIG_HOST:4532 \
+  --ptt rigctld:XARA_OR_SSH_HOST:4532 \
   --capture <pipewire-source> --playback <pipewire-sink> \
   --port 8300 --kiss-port off
 ```

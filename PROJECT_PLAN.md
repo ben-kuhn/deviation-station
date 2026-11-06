@@ -496,7 +496,8 @@ Assess xara's VARA-compatible control interface and calibration behavior. Reuse 
 a bounded calibration source. The adapter verifies PTT through `rigctld` and
 relies on xara’s automatic tune-off when the command client disconnects.
 Remote xara can use direct TCP or an SSH loopback port-forward for the command
-port and reuses the shared remote `rigctld` endpoint.
+port. Its rigctld host follows the xara host or the shared SSH host; only the
+remote rigctld port is configured separately.
 
 ### 9.7 QTSoundModem
 
@@ -708,7 +709,9 @@ The overlay README will list the package, its purpose, and the installation attr
   hardware-free target rehearsals with the Simulator source.
   **Status:** Implemented with the live Generic FM discriminator profile and
   bounded bidirectional level search. Unit tests cover linear, nonlinear,
-  unreachable, timeout, cancel, and marginal-quality paths.
+  unreachable, timeout, cancel, and marginal-quality paths. The target follows
+  the selected M17, DMR, FM narrow, or FM wide mode automatically and remains
+  editable for custom targets.
 - Add the Direwolf adapter and test success, cancellation, timeout, low-SNR, and unreachable-target paths.
   **Status:** Implemented with an exclusive generated Direwolf calibration
   process. Unit tests cover process ownership, PTT confirmation, cleanup, and

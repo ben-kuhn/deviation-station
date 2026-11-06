@@ -12,8 +12,11 @@
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
 - Remote xara TUNE can use direct TCP or an SSH local-port tunnel to the BBS
-  command port. Remote xara reuses the shared remote `rigctld` for frequency
-  and PTT verification.
+  command port. The remote rigctld host follows the xara host or shared SSH
+  host; only its port is configured.
+- Remote rigctld setup now derives the host from the remote service host
+  instead of requiring a separately configured host. The xara row exposes its
+  own rigctld port; the shared remote port remains in SDR / Rig.
 
 ### Measurement UI
 
@@ -31,6 +34,9 @@
   returns later. Already-captured results are preserved.
 - Added a **Deviation Ref…** dialog covering M17, DMR, analog FM, and Bessel
   references.
+- Added Generic FM narrow/wide selection. Target deviation now follows the
+  selected mode automatically: M17 2.400 kHz, DMR 1.944 kHz, FM narrow
+  2.500 kHz, or FM wide 5.000 kHz; custom target entry remains available.
 - Expanded remote-Direwolf field tooltips and added a **Remote requirements…**
   checklist covering SSH authentication, remote PipeWire, RF geometry,
   `ADEVICE`, remote `rigctld`, and PTT/watchdog behavior.
