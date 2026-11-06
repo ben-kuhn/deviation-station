@@ -396,6 +396,11 @@ trusting a Bessel result. Target-deviation readings do not use the tone
 frequency for the deviation calculation, but still require a steady
 modulation source.
 
+**Detect Tone** measures the dominant tone from the live FM demodulator and
+sets the tone field. Use it with the receiver running in **Digital** mode and
+a steady VARA/xara TUNE carrier active. The display reports the estimated
+frequency, spectral confidence, and FFT resolution.
+
 #### Remote VARA/xara on the BBS
 
 The VARA/xara TUNE source can run on the BBS while the SDR remains local.

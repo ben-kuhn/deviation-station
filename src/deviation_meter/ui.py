@@ -98,6 +98,7 @@ from .target_cal import (
     TargetCalProgress,
     TargetCalState,
 )
+from .tone import ToneError
 from .xara import XaraCalibration, XaraClient, XaraConfig, XaraError
 
 WHITE = QColor("#f5f5f5")
@@ -1384,7 +1385,7 @@ class MainWindow(QMainWindow):
         xara_layout.addWidget(self.xara_tone_label)
         self.xara_tone_spin = QDoubleSpinBox()
         self.xara_tone_spin.setRange(100.0, 5000.0)
-        self.xara_tone_spin.setDecimals(0)
+        self.xara_tone_spin.setDecimals(1)
         self.xara_tone_spin.setSuffix(" Hz")
         self.xara_tone_spin.setValue(1500.0)
         self.xara_tone_spin.setToolTip(
@@ -1432,6 +1433,14 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Preferred,
         )
         info_row.addWidget(self.xara_info_label, 1)
+        self.detect_tone_button = QPushButton("Detect Tone")
+        self.detect_tone_button.setToolTip(
+            "Measure the dominant tone from live demodulated FM audio and "
+            "set the VARA/xara TUNE tone. Start the receiver in Digital mode "
+            "and leave the modem TUNE carrier active."
+        )
+        self.detect_tone_button.clicked.connect(self._detect_xara_tone)
+        info_row.addWidget(self.detect_tone_button)
         self.xara_test_button = QPushButton("Test")
         self.xara_test_button.setToolTip(
             "Connect to VARA/xara without transmitting: read VERSION and TUNE "
@@ -1727,6 +1736,7 @@ class MainWindow(QMainWindow):
             self.xara_use_rig_check,
             self.xara_rig_port_label,
             self.xara_rig_port_spin,
+            self.detect_tone_button,
             self.xara_test_button,
             self.xara_info_label,
             self.auto_safety_label,
@@ -2027,6 +2037,7 @@ class MainWindow(QMainWindow):
             self.xara_tone_spin,
             self.xara_use_rig_check,
             self.xara_rig_port_spin,
+            self.detect_tone_button,
             self.xara_test_button,
         ):
             control.setEnabled(not running)
@@ -2208,6 +2219,43 @@ class MainWindow(QMainWindow):
             "Bessel result."
         )
         self._update_auto_control_state()
+
+    def _detect_xara_tone(self) -> None:
+        if self._auto_running:
+            return
+        session = self._session
+        if session is None or not session.running:
+            self.status_label.setText(
+                "Start the live receiver in Digital mode before detecting "
+                "the VARA/xara tone"
+            )
+            return
+        if session.config.mode != "digital":
+            self.status_label.setText(
+                "Tone detection needs Digital mode so the FM demodulator is "
+                "running; switch to Digital and start the receiver"
+            )
+            return
+        try:
+            estimate = session.estimate_tone()
+        except ToneError as exc:
+            self.status_label.setText(f"Tone detection failed: {exc}")
+            return
+        if not estimate.valid:
+            self.status_label.setText(
+                f"Tone detection weak: {estimate.frequency_hz:.1f} Hz "
+                f"(confidence {estimate.confidence_db:.1f} dB); verify a "
+                "steady TUNE carrier"
+            )
+            return
+        self.xara_tone_spin.setValue(
+            round(estimate.frequency_hz, 1)
+        )
+        self.status_label.setText(
+            f"Detected TUNE tone {estimate.frequency_hz:.1f} Hz "
+            f"(confidence {estimate.confidence_db:.1f} dB, "
+            f"resolution {estimate.bin_hz:.2f} Hz)"
+        )
 
     def _test_xara_connection(self) -> None:
         if self._auto_running:

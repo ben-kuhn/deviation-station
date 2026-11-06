@@ -1,5 +1,6 @@
 import os
 from dataclasses import replace
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -12,6 +13,7 @@ from deviation_meter.target_cal import (  # noqa: E402
     TargetCalProgress,
     TargetCalState,
 )
+from deviation_meter.tone import ToneEstimate  # noqa: E402
 from deviation_meter.ui import (  # noqa: E402
     DeviceDialog,
     DeviceSettings,
@@ -405,6 +407,36 @@ def test_target_failure_fills_progress_and_shows_audio_hint() -> None:
         assert "MAX 1.758 kHz" in window.auto_outcome_label.text()
         assert "INCREASE TX AUDIO" in window.auto_outcome_label.text()
     finally:
+        window.close()
+        app.processEvents()
+
+
+def test_detect_tone_button_sets_vara_xara_tone() -> None:
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    original_session = window._session
+    original_tone = window.xara_tone_spin.value()
+
+    class FakeSession:
+        running = True
+        config = SimpleNamespace(mode="digital")
+
+        def estimate_tone(self):
+            return ToneEstimate(
+                frequency_hz=1487.4,
+                confidence_db=22.5,
+                bin_hz=1.67,
+                sample_count=28_800,
+            )
+
+    try:
+        window._session = FakeSession()
+        window._detect_xara_tone()
+        assert window.xara_tone_spin.value() == 1487.4
+        assert "Detected TUNE tone 1487.4 Hz" in window.status_label.text()
+    finally:
+        window._session = original_session
+        window.xara_tone_spin.setValue(original_tone)
         window.close()
         app.processEvents()
 

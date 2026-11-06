@@ -21,6 +21,7 @@ from .analysis import (
 )
 from .live import LiveSnapshot
 from .simulator import fsk4_iq
+from .tone import ToneEstimate, detect_tone_hz
 
 FFT_SIZE = 1_024
 SPECTRUM_UPDATE_VECTORS = 5
@@ -56,11 +57,20 @@ class LiveState:
         self._spectrum_sequence = 0
         self._snapshot: LiveSnapshot | None = None
         self._error: str | None = None
+        self._audio = np.empty(0, dtype=np.float64)
 
     def set_spectrum(self, values: tuple[float, ...]) -> None:
         with self._lock:
             self._spectrum = values
             self._spectrum_sequence += 1
+
+    def set_audio(self, samples) -> None:
+        with self._lock:
+            self._audio = np.asarray(samples, dtype=np.float64).copy()
+
+    def audio(self) -> np.ndarray:
+        with self._lock:
+            return self._audio.copy()
 
     def spectrum(self) -> tuple[float, ...]:
         with self._lock:
@@ -210,6 +220,12 @@ class MeasurementSink(gr.sync_block):
                 )
                 self._complex_buffer = self._complex_buffer[self._hop_samples :]
                 self._frequency_buffer = self._frequency_buffer[self._hop_samples :]
+            audio_size = min(
+                self._frequency_buffer.size,
+                int(round(self._sample_rate)),
+            )
+            if audio_size:
+                self._state.set_audio(self._frequency_buffer[-audio_size:])
             return count
         except Exception as exc:  # pragma: no cover - exercised with bad inputs
             self._state.set_error(f"{exc.__class__.__name__}: {exc}")
@@ -444,6 +460,22 @@ class GnuRadioLiveSession:
             if isinstance(exc, GnuRadioLiveError):
                 raise
             raise GnuRadioLiveError(f"failed to start GNU Radio receiver: {exc}") from exc
+
+    def estimate_tone(
+        self,
+        *,
+        min_hz: float = 300.0,
+        max_hz: float = 5_000.0,
+    ) -> ToneEstimate:
+        """Estimate the dominant modulation tone from live demodulated audio."""
+
+        samples = self.state.audio()
+        return detect_tone_hz(
+            samples,
+            self.config.target_sample_rate_hz,
+            min_hz=min_hz,
+            max_hz=max_hz,
+        )
 
     def stop(self) -> None:
         top_block = self._top_block
