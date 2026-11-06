@@ -49,6 +49,8 @@
   returns later. Already-captured results are preserved.
 - Added a **Deviation Ref…** dialog covering M17, DMR, analog FM, and Bessel
   references.
+- Target-calibration range failures now include the maximum deviation reached
+  at maximum drive and a hint to raise TX audio or lower the target.
 - Added Generic FM narrow/wide selection. Target deviation now follows the
   selected mode automatically: M17 2.400 kHz, DMR 1.944 kHz, FM narrow
   2.500 kHz, or FM wide 5.000 kHz; custom target entry remains available.

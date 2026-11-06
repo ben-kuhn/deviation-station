@@ -378,6 +378,13 @@ so either change the instance address or run your own SSH port forward. Use the
 FM values for FM deviation work and select **FM wide** if the instance is
 configured as wide.
 
+If target calibration fails with **target is above the maximum audio level**,
+the controller reached the maximum TUNE drive and the measured deviation was
+still below the target. There is no further software gain available through
+VARA/xara. Raise the radio data-input level or the modem playback/sink level,
+or choose a lower target. The failure message includes the maximum deviation
+reached at maximum drive.
+
 The **Test** button connects and reads VERSION, TUNE state, and modem PTT
 status without starting TUNE or transmitting.
 

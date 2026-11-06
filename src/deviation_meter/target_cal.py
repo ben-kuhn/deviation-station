@@ -314,7 +314,15 @@ class TargetCalController:
         self._step = self._coarse_index
         if self._coarse_index >= len(self._coarse_levels):
             if self._coarse_direction > 0:
-                self._fail("target is above the maximum audio level")
+                detail = (
+                    f"; reached {self._measured_hz:.0f} Hz at maximum drive"
+                    if self._measured_hz is not None
+                    else ""
+                )
+                self._fail(
+                    "target is above the maximum audio level"
+                    f"{detail}; raise TX audio or lower the target"
+                )
             else:
                 self._fail("target is below the minimum audio level")
             return
