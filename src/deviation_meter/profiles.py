@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from numpy.typing import ArrayLike
@@ -97,11 +98,14 @@ class GenericFmProfile:
     low_percentile: float = 0.5
     high_percentile: float = 99.5
     smoothing_bandwidth_hz: float | None = 6000.0
+    maximum_carrier_flatness: float = 0.30
 
     def measure(
         self,
         frequency_hz: ArrayLike,
         sample_rate_hz: float | None = None,
+        *,
+        carrier_flatness: float | None = None,
     ) -> DeviationReading:
         smoothing_enabled = (
             sample_rate_hz is not None and self.smoothing_bandwidth_hz is not None
@@ -138,6 +142,15 @@ class GenericFmProfile:
                 issues.append("noise or filtering uncertainty remains in the peak estimate")
             else:
                 status = ReadingStatus.GOOD
+            if (
+                carrier_flatness is not None
+                and math.isfinite(carrier_flatness)
+                and carrier_flatness > self.maximum_carrier_flatness
+            ):
+                status = ReadingStatus.INVALID
+                issues.append(
+                    "receiver noise floor dominates; no FM carrier detected"
+                )
 
         return DeviationReading(
             deviation_hz=estimate.deviation_hz if status is not ReadingStatus.INVALID else None,
@@ -161,6 +174,7 @@ class GenericFmProfile:
                 "smoothing_bandwidth_hz": (
                     self.smoothing_bandwidth_hz if sample_rate_hz is not None else None
                 ),
+                "carrier_flatness": carrier_flatness,
             },
         )
 

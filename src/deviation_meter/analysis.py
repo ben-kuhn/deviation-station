@@ -511,6 +511,36 @@ def detect_activity(
     return tuple(segments), noise_rms
 
 
+def channel_spectral_flatness(samples: NDArray[np.complexfloating]) -> float | None:
+    """Return spectral flatness of a channelized complex block.
+
+    White noise is close to flat (near 1.0), while an FM carrier and its
+    sidebands concentrate energy into a small part of the channel spectrum
+    (near 0.0).  This gives the Generic FM profile a way to reject a live
+    window that contains only receiver noise.
+    """
+
+    values = np.asarray(samples, dtype=np.complex128)
+    if values.ndim != 1 or values.size < 64:
+        return None
+    if not np.all(np.isfinite(values)):
+        return None
+    values = values - np.mean(values)
+    if not np.any(np.abs(values) > 1e-12):
+        return None
+    window = np.hanning(values.size)
+    power = np.abs(np.fft.fft(values * window)) ** 2
+    power = power[1:]  # discard the DC term
+    if power.size == 0 or not np.any(power > 0.0):
+        return None
+    floor = 1e-30
+    geometric_mean = math.exp(float(np.mean(np.log(power + floor))))
+    arithmetic_mean = float(np.mean(power))
+    if arithmetic_mean <= 0.0:
+        return None
+    return geometric_mean / arithmetic_mean
+
+
 def _measure_segments(
     profile: Fsk4Profile | GenericFmProfile,
     signal: ChannelizedSignal,
@@ -545,7 +575,19 @@ def _measure_segments(
         else:
             segment_frequency = frequency_hz[start:end]
         try:
-            reading = profile.measure(segment_frequency, signal.sample_rate_hz)
+            if isinstance(profile, GenericFmProfile):
+                reading = profile.measure(
+                    segment_frequency,
+                    signal.sample_rate_hz,
+                    carrier_flatness=channel_spectral_flatness(
+                        signal.samples[start:end]
+                    ),
+                )
+            else:
+                reading = profile.measure(
+                    segment_frequency,
+                    signal.sample_rate_hz,
+                )
         except (DiscriminatorError, ValueError) as exc:
             results.append(
                 SegmentReading(

@@ -7,9 +7,13 @@ import pytest
 from deviation_meter.analysis import (
     AnalysisError,
     analyze_capture,
+    channel_spectral_flatness,
     load_capture,
+    measure_channelized_frequency,
     write_analysis_report,
 )
+from deviation_meter.discriminator import quadrature_demod_frequency
+from deviation_meter.profiles import GENERIC_FM_PROFILE
 from deviation_meter.simulator import fsk4_iq
 
 
@@ -189,3 +193,48 @@ def test_analyze_rejects_unknown_profile(tmp_path: Path) -> None:
     _m17_fixture(path)
     with pytest.raises(AnalysisError, match="unknown profile"):
         analyze_capture(path, profile_name="c4fm")
+
+
+def test_generic_live_profile_rejects_noise_only_window() -> None:
+    sample_rate = 48_000.0
+    rng = np.random.default_rng(12)
+    iq = (
+        rng.standard_normal(24_000) + 1j * rng.standard_normal(24_000)
+    ).astype(np.complex64)
+    demod = quadrature_demod_frequency(iq, sample_rate)
+    frequency = np.concatenate(([demod[0]], demod))
+
+    assert channel_spectral_flatness(iq) > 0.5
+    analysis = measure_channelized_frequency(
+        GENERIC_FM_PROFILE,
+        iq,
+        frequency,
+        sample_rate,
+        assume_continuous_if_flat=True,
+    )
+    assert analysis.selected is None
+
+
+def test_generic_live_profile_accepts_fm_tone_window() -> None:
+    sample_rate = 48_000.0
+    samples = np.arange(24_000) / sample_rate
+    phase = (
+        2.0 * np.pi * 1_000.0 * samples
+        + (2_500.0 / 1_500.0) * np.sin(2.0 * np.pi * 1_500.0 * samples)
+    )
+    iq = np.exp(1j * phase).astype(np.complex64)
+    demod = quadrature_demod_frequency(iq, sample_rate)
+    frequency = np.concatenate(([demod[0]], demod))
+
+    assert channel_spectral_flatness(iq) < 0.1
+    analysis = measure_channelized_frequency(
+        GENERIC_FM_PROFILE,
+        iq,
+        frequency,
+        sample_rate,
+        assume_continuous_if_flat=True,
+    )
+    reading = analysis.selected
+    assert reading is not None
+    assert reading.valid
+    assert reading.deviation_hz == pytest.approx(2_400.0, rel=0.05)

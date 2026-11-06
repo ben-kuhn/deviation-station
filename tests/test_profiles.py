@@ -152,6 +152,18 @@ def test_generic_profile_rejects_filter_spread_clicks() -> None:
     assert reading.quality.status is ReadingStatus.INVALID
 
 
+def test_generic_profile_rejects_flat_channel_spectrum() -> None:
+    reading = GENERIC_FM_PROFILE.measure(
+        np.zeros(20_000),
+        192_000.0,
+        carrier_flatness=0.6,
+    )
+    assert not reading.valid
+    assert reading.deviation_hz is None
+    assert reading.quality.status is ReadingStatus.INVALID
+    assert "no FM carrier" in " ".join(reading.quality.issues)
+
+
 def test_generic_profile_supports_disabling_smoothing() -> None:
     profile = GenericFmProfile(smoothing_bandwidth_hz=None)
     reading = profile.measure(np.zeros(20_000), 192_000.0)
