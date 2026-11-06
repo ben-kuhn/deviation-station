@@ -389,10 +389,14 @@ controls `TUNE -30..0 dB`, and sends `TUNE OFF` at completion.
 
 ### VARA and QtSoundModem — manual-assisted
 
-VARA’s TUNE button and drive slider are GUI controls. Its documented TCP
-command port carries session/data commands, not a scriptable steady-tone
-calibration command. VARA AutoTune pings and ordinary traffic are not valid
-Bessel tones. QtSoundModem is likewise a GUI application without a stable
+VARA HF 4.6.2 and newer added command-port `TUNE` commands (used by VarAC),
+so the xara adapter’s TUNE command shape may also work with newer VARA HF.
+Older VARA builds, VARA FM, exact tone frequency/waveform, PTT readback, and
+licensing/registration still need verification. If VARA’s TUNE output is a
+VARA test waveform or AutoTune sequence rather than a steady single tone, it is
+not valid for a Bessel measurement. VARA’s TUNE button and drive slider remain
+GUI controls, and ordinary AutoTune pings or traffic must not be treated as
+steady Bessel tones. QtSoundModem is likewise a GUI application without a stable
 headless test-tone interface.
 
 Use the **Measure** tab for these modems:
