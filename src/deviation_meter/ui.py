@@ -126,9 +126,9 @@ _REMOTE_HELP_TEXT = (
     "• Direwolf config files are local templates. Their ADEVICE, ARATE, "
     "ACHANNELS, and MODEM values are uploaded; ADEVICE must exist remotely.\n"
     "• Stop any normal Direwolf instance on the remote host before starting.\n"
-    "• The remote Direwolf rigctld host is derived from the SSH host. The "
-    "VARA/xara rigctld host is the VARA/xara host. Only the rigctld port is "
-    "configured separately.\n"
+    "• The remote Direwolf rigctld host is derived from the SSH host. "
+    "VARA/xara can optionally use a rigctld for frequency/mode checks; PTT "
+    "is always owned by the modem.\n"
     "• Remote Direwolf owns PTT; VARA/xara PTT is owned by the modem.\n"
     "• No built-in SSH tunnel is used for VARA/xara."
 )
@@ -1373,14 +1373,24 @@ class MainWindow(QMainWindow):
             "(--port, normally 8300). This is not the web UI --ui-port."
         )
         xara_layout.addWidget(self.xara_port_spin)
-        self.xara_rig_port_label = QLabel("Rigctld port")
+        self.xara_use_rig_check = QCheckBox("Use rigctld")
+        self.xara_use_rig_check.setToolTip(
+            "Optional frequency/mode preflight through a rigctld. PTT is "
+            "always owned by the VARA/xara modem."
+        )
+        self.xara_use_rig_check.setChecked(False)
+        self.xara_use_rig_check.toggled.connect(
+            self._on_xara_use_rig_changed
+        )
+        xara_layout.addWidget(self.xara_use_rig_check)
+        self.xara_rig_port_label = QLabel("Port")
         xara_layout.addWidget(self.xara_rig_port_label)
         self.xara_rig_port_spin = QSpinBox()
         self.xara_rig_port_spin.setRange(1, 65535)
         self.xara_rig_port_spin.setValue(self._device.remote_rig_port)
         self.xara_rig_port_spin.setToolTip(
-            "Remote rigctld port for frequency/mode checks. PTT is owned by "
-            "the VARA/xara modem."
+            "Optional rigctld port for frequency/mode checks. PTT is owned "
+            "by the VARA/xara modem."
         )
         self.xara_rig_port_spin.valueChanged.connect(self._refresh_xara_info)
         xara_layout.addWidget(self.xara_rig_port_spin)
@@ -1684,6 +1694,7 @@ class MainWindow(QMainWindow):
             self.xara_host_edit,
             self.xara_port_label,
             self.xara_port_spin,
+            self.xara_use_rig_check,
             self.xara_rig_port_label,
             self.xara_rig_port_spin,
             self.xara_test_button,
@@ -1750,9 +1761,13 @@ class MainWindow(QMainWindow):
             str(store.value("xara_host", "127.0.0.1"))
         )
         self.xara_port_spin.setValue(int(store.value("xara_port", 8300)))
+        self.xara_use_rig_check.setChecked(
+            _settings_bool(store.value("xara_use_rig", False))
+        )
         self.xara_rig_port_spin.setValue(
             int(store.value("xara_rig_port", self._device.remote_rig_port))
         )
+        self._on_xara_use_rig_changed(self.xara_use_rig_check.isChecked())
         direwolf_tone = str(store.value("direwolf_tone", "mark"))
         tone_index = self.direwolf_tone_combo.findData(direwolf_tone)
         if tone_index >= 0:
@@ -1806,6 +1821,10 @@ class MainWindow(QMainWindow):
         )
         store.setValue("xara_host", self.xara_host_edit.text().strip())
         store.setValue("xara_port", self.xara_port_spin.value())
+        store.setValue(
+            "xara_use_rig",
+            self.xara_use_rig_check.isChecked(),
+        )
         store.setValue("xara_rig_port", self.xara_rig_port_spin.value())
 
         store.setValue("meter_range", float(self.range_combo.currentData()))
@@ -1968,10 +1987,13 @@ class MainWindow(QMainWindow):
             self.direwolf_tone_combo,
             self.xara_host_edit,
             self.xara_port_spin,
+            self.xara_use_rig_check,
             self.xara_rig_port_spin,
             self.xara_test_button,
         ):
             control.setEnabled(not running)
+        if not running:
+            self.xara_rig_port_spin.setEnabled(self._xara_rig_enabled())
         self.auto_tone_spin.setEnabled(
             not running and generator == "internal"
         )
@@ -2067,6 +2089,16 @@ class MainWindow(QMainWindow):
         host = self.xara_host_edit.text().strip().lower()
         return host not in {"", "127.0.0.1", "localhost", "::1"}
 
+    def _xara_rig_enabled(self) -> bool:
+        return bool(
+            hasattr(self, "xara_use_rig_check")
+            and self.xara_use_rig_check.isChecked()
+        )
+
+    def _on_xara_use_rig_changed(self, enabled: bool) -> None:
+        self.xara_rig_port_spin.setEnabled(enabled)
+        self._refresh_xara_info()
+
     @staticmethod
     def _ssh_destination_host(host: str) -> str:
         text = host.strip()
@@ -2084,32 +2116,28 @@ class MainWindow(QMainWindow):
             return
         port = self.xara_port_spin.value()
         host = self.xara_host_edit.text().strip()
+        missing = not host
         endpoint = f"{host or '(set host)'}:{port}"
-        if self._xara_is_remote():
-            rig_host = self._xara_remote_rig_host()
+        if self._xara_rig_enabled():
             rig_text = (
-                f"freq rig {rig_host or '(set host)'}:"
+                f"freq rig {self._xara_remote_rig_host()}:"
                 f"{self.xara_rig_port_spin.value()}"
             )
-            missing = not rig_host
         else:
-            rig_text = (
-                f"freq rig {self._device.rig_host}:{self._device.rig_port}"
-            )
-            missing = False
-        self.xara_rig_port_spin.setEnabled(self._xara_is_remote())
+            rig_text = "freq manual"
         self.xara_info_label.setText(
-            f"VARA/xara command port · {endpoint} · {rig_text}"
+            f"VARA/xara command port · {endpoint} · modem PTT · {rig_text}"
         )
         self.xara_info_label.setStyleSheet(
             "color: #ffbf47;" if missing else "color: #b7bcc2;"
         )
         self.xara_info_label.setToolTip(
-            f"{endpoint} · {rig_text}. VARA/xara command port is --port "
-            "(normally 8300), not --ui-port. PTT is owned by the modem; the "
-            "rigctld entry is used only for frequency/mode checks. Use your "
-            "own SSH port forwarding if the command port is not directly "
-            "reachable. TUNE uses a 1500 Hz ALC test tone."
+            f"{endpoint}. VARA/xara command port is --port (normally 8300), "
+            "not --ui-port. PTT is owned by the modem. The optional rigctld "
+            "is used only for frequency/mode checks; disable it and set the "
+            "transmitter frequency manually if unavailable. Use your own SSH "
+            "port forwarding if the command port is not directly reachable. "
+            "TUNE uses a 1500 Hz ALC test tone."
         )
         self._update_auto_control_state()
 
@@ -2142,17 +2170,17 @@ class MainWindow(QMainWindow):
             ptt_text = "not reported yet"
         else:
             ptt_text = "ON" if ptt else "off"
-        if self._xara_is_remote():
-            rig_host = self._xara_remote_rig_host()
-            rig_port = self.xara_rig_port_spin.value()
+        if self._xara_rig_enabled():
+            try:
+                frequency = RigctldClient(
+                    self._xara_remote_rig_host(),
+                    self.xara_rig_port_spin.value(),
+                ).get_frequency()
+                rig_text = f"freq rig {frequency / 1e6:.6f} MHz"
+            except (RigctldError, OSError) as exc:
+                rig_text = f"freq rig failed: {exc}"
         else:
-            rig_host = self._device.rig_host
-            rig_port = self._device.rig_port
-        try:
-            frequency = RigctldClient(rig_host, rig_port).get_frequency()
-            rig_text = f"freq rig {frequency / 1e6:.6f} MHz"
-        except (RigctldError, OSError) as exc:
-            rig_text = f"freq rig failed: {exc}"
+            rig_text = "freq manual"
         self.status_label.setText(
             f"VARA/xara OK · {version} · TUNE {drive} dB · "
             f"modem PTT {ptt_text} · {rig_text}"
@@ -3072,6 +3100,16 @@ class MainWindow(QMainWindow):
         except ValueError as exc:
             self.status_label.setText(f"Frequency error: {exc}")
             return None
+        if (
+            self.auto_generator_combo.currentData() == "xara"
+            and not self._xara_rig_enabled()
+        ):
+            self.frequency_edit.setText(f"{requested / 1e6:.6f}")
+            self.status_label.setText(
+                "VARA/xara: rigctld check disabled; verify the transmitter "
+                "frequency manually"
+            )
+            return requested
         rig_host, rig_port, remote = self._selected_rig_endpoint()
         if remote and not rig_host:
             self.status_label.setText(
@@ -3553,7 +3591,11 @@ class MainWindow(QMainWindow):
 
     def _selected_rig_endpoint(self) -> tuple[str, int, bool]:
         generator = str(self.auto_generator_combo.currentData())
-        if generator == "xara" and self._xara_is_remote():
+        if (
+            generator == "xara"
+            and self._xara_rig_enabled()
+            and self._xara_is_remote()
+        ):
             return (
                 self._xara_remote_rig_host(),
                 self.xara_rig_port_spin.value(),

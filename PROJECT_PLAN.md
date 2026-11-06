@@ -495,10 +495,10 @@ Assess xara's VARA-compatible control interface and calibration behavior. Reuse 
 `TUNE -30..0 dB`, `TUNE OFF`, and `TUNE ?`; the 1500 Hz ALC tone is available as
 a bounded calibration source. The adapter verifies modem-originated PTT
 `PTT ON`/`PTT OFF` notifications; the external rigctld is used only for
-frequency/mode checks. Remote VARA/xara uses its command port directly; there
-is no built-in SSH transport, though users can run their own port forwarding.
-The UI is labeled **VARA/xara** to allow testing against VARA builds that
-expose compatible TUNE and PTT commands.
+frequency/mode checks are optional. Remote VARA/xara uses its command port
+directly; there is no built-in SSH transport, though users can run their own
+port forwarding. The UI is labeled **VARA/xara** to allow testing against VARA
+builds that expose compatible TUNE and PTT commands.
 
 ### 9.7 QTSoundModem
 

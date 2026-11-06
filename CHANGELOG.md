@@ -12,9 +12,10 @@
   the remote host must provide the same `ADEVICE` plus Direwolf, PipeWire,
   `pw-dump`, and `wpctl`.
 - Remote VARA/xara TUNE uses its command port directly. The VARA/xara host is
-  used for its rigctld frequency endpoint; only the remote rigctld port is
-  configured. The built-in VARA/xara SSH tunnel was removed; users can run
-  their own SSH port forwarding.
+  used for its optional rigctld frequency endpoint; the rigctld port can be
+  disabled and the transmitter frequency set manually. The built-in
+  VARA/xara SSH tunnel was removed; users can run their own SSH port
+  forwarding.
 - Renamed the generator to **VARA/xara TUNE**. VARA/xara PTT is now owned by
   the modem: the application waits for command-port `PTT ON`/`PTT OFF`
   notifications instead of keying or verifying PTT through a separate

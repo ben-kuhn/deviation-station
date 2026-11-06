@@ -277,6 +277,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
     original_host = window.xara_host_edit.text()
     original_port = window.xara_port_spin.value()
     original_rig_port = window.xara_rig_port_spin.value()
+    original_use_rig = window.xara_use_rig_check.isChecked()
     original_device = replace(window._device)
     try:
         window.source_combo.setCurrentIndex(window.source_combo.findData("live"))
@@ -285,6 +286,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         )
         window.xara_host_edit.setText("bbs.local")
         window.xara_port_spin.setValue(8302)
+        window.xara_use_rig_check.setChecked(True)
         window.xara_rig_port_spin.setValue(4533)
         window._refresh_xara_info()
         app.processEvents()
@@ -310,6 +312,15 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         assert window._xara_remote is True
         assert "VARA/xara TUNE" in prepared[2]
         window._xara_calibration = None
+
+        window.xara_use_rig_check.setChecked(False)
+        window._refresh_xara_info()
+        assert "freq manual" in window.xara_info_label.text()
+        assert window._selected_rig_endpoint() == (
+            window._device.rig_host,
+            window._device.rig_port,
+            False,
+        )
     finally:
         window._xara_calibration = None
         window.auto_generator_combo.setCurrentIndex(
@@ -321,6 +332,7 @@ def test_remote_xara_direct_endpoint_and_rig(tmp_path) -> None:
         window.xara_host_edit.setText(original_host)
         window.xara_port_spin.setValue(original_port)
         window.xara_rig_port_spin.setValue(original_rig_port)
+        window.xara_use_rig_check.setChecked(original_use_rig)
         window._device = original_device
         window.close()
         app.processEvents()

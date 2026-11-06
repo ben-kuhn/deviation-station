@@ -354,7 +354,9 @@ the modem’s internal drive and key PTT. The 3–100% level range maps to
 
 PTT is owned by the modem. The application waits for the modem’s `PTT ON` and
 `PTT OFF` command-port notifications instead of keying an external rigctld.
-`TUNE OFF` is sent at completion, cancellation, or timeout.
+`TUNE OFF` is sent at completion, cancellation, or timeout. A separate
+rigctld frequency/mode check is optional; leave **Use rigctld** off if the
+modem has no usable rigctld and set the transmitter frequency manually.
 
 The modem’s TUNE drive is **not** a PipeWire stream volume. It is applied
 through the command port each run. xara persists a changed drive itself: when
@@ -398,13 +400,13 @@ forwarding yourself, for example:
 ssh -N -L 8302:127.0.0.1:8302 -L 4533:127.0.0.1:4533 bbs
 ```
 
-Then use `127.0.0.1:8302` as the VARA/xara command endpoint and configure the
-local rigctld settings for the forwarded rig port. PTT remains owned by the
-modem.
+Then use `127.0.0.1:8302` as the VARA/xara command endpoint. PTT remains
+owned by the modem.
 
-Remote VARA/xara derives the frequency-control rigctld host from the VARA/xara
-host when it is a non-loopback address. Use the **Rigctld port** field in the
-row for frequency and mode checks.
+Frequency/mode checking through rigctld is optional. Enable **Use rigctld**
+and set the **Rigctld port** if one is available; the host follows the
+VARA/xara host. Leave it off when VARA/xara has no usable rigctld and set the
+transmitter frequency manually.
 
 The local SDR must hear the BBS transmitter. No SDR IQ is transported.
 
