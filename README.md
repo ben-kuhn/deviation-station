@@ -72,6 +72,85 @@ The UI starts in simulator mode. Select **Live SDR**, open **SDR / Rig…**, and
 set the SoapySDR device arguments, sample rate, receive frequency, gain,
 bandwidth, and optional `rigctld` endpoint.
 
+### Finding and setting SoapySDR arguments
+
+The **Device args** field is passed directly to SoapySDR. It selects the SDR
+driver and, when needed, a specific device or serial number. The default is:
+
+```text
+driver=rtlsdr
+```
+
+List the devices SoapySDR can see:
+
+```bash
+devstation capture devices
+```
+
+Filter the list to one driver:
+
+```bash
+devstation capture devices --device-args "driver=rtlsdr"
+```
+
+`devstation doctor` checks the Python stack; `devstation capture devices` checks
+whether SoapySDR can actually see hardware. More detail is available from
+SoapySDR’s utilities:
+
+```bash
+SoapySDRUtil --info
+SoapySDRUtil --find
+SoapySDRUtil --probe="driver=rtlsdr"
+```
+
+Use the driver name and serial reported by `--find` in the device arguments.
+Common examples:
+
+| Hardware | Device arguments |
+|---|---|
+| RTL-SDR | `driver=rtlsdr` |
+| Multiple RTL-SDRs | `driver=rtlsdr,serial=00000001` |
+| Airspy | `driver=airspy` |
+| Airspy HF+ | `driver=airspyhf` |
+| HackRF | `driver=hackrf` |
+| SDRplay | `driver=sdrplay` |
+| LimeSDR | `driver=lime` |
+| USRP / UHD | `driver=uhd` |
+| PlutoSDR | `driver=plutosdr,uri=ip:192.168.2.1` |
+
+Driver names depend on the SoapySDR modules installed on your system. If a
+device is missing, check `SoapySDRUtil --info`, the USB connection, the
+distribution’s SoapySDR module package, and the device permissions/udev rules.
+On non-Nix systems, the Python SoapySDR bindings and the hardware driver modules
+must both be installed.
+
+For CLI capture, pass the same string with `--device-args`:
+
+```bash
+devstation capture iq \
+  --device-args "driver=rtlsdr,serial=00000001" \
+  --center-frequency 145.600M \
+  --signal-frequency 145.500M \
+  --sample-rate 240k \
+  --duration 5 \
+  -o captures/signal.cf32
+```
+
+The sample rate must be an integer multiple of 48 kHz. The live GUI defaults to
+240 kHz; `capture iq` defaults to 1.024 MHz. Choose a bandwidth appropriate for
+the signal and driver; a wider bandwidth usually costs CPU without improving an
+FM deviation measurement.
+
+For RTL-SDR receivers, offset the SDR center frequency from the signal by about
+100 kHz to avoid the DC spike. In the GUI, set **LO offset** to `50 kHz` or more;
+the application places the SDR center above the receive frequency. For CLI
+capture, set `--center-frequency` about 100 kHz above `--signal-frequency`.
+
+Gain is driver-specific. Start with a low fixed gain and increase it until the
+waterfall shows a clean signal without clipping. If the device supports
+automatic gain, it can be selected through the driver’s SoapySDR arguments or
+the application’s gain control.
+
 ## Measurement modes
 
 | Mode | Reference |
