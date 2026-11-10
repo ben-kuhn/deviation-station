@@ -42,7 +42,7 @@ class SshTransport:
         digest = hashlib.sha1(f"{host}:{os.getpid()}".encode()).hexdigest()[:16]
         self.control_path = os.path.join(
             tempfile.gettempdir(),
-            f"deviation-meter-ssh-{digest}",
+            f"deviationstation-ssh-{digest}",
         )
 
     def _ssh_command(self) -> list[str]:

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from . import __version__
+from . import APPLICATION_NAME, __version__
 from .measurement import DeviationReading, MeasurementEngine
 
 
@@ -19,7 +19,11 @@ class CalibrationError(ValueError):
 
 
 def default_calibration_dir() -> Path:
-    """Return the per-user calibration directory."""
+    """Return the per-user calibration directory.
+
+    The legacy application directory is intentionally retained so existing
+    calibration records remain discoverable after the DeviationStation rename.
+    """
 
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
@@ -59,7 +63,7 @@ class BesselVerificationRecord:
             "kind": "bessel-null-verification",
             "created_utc": self.created_utc,
             "application": {
-                "name": "gnuradio-deviation-meter",
+                "name": APPLICATION_NAME,
                 "version": __version__,
             },
             "receive_frequency_hz": self.receive_frequency_hz,
@@ -111,7 +115,7 @@ class TargetDeviationRecord:
             "kind": "discriminator-target-calibration",
             "created_utc": self.created_utc,
             "application": {
-                "name": "gnuradio-deviation-meter",
+                "name": APPLICATION_NAME,
                 "version": __version__,
             },
             "receive_frequency_hz": self.receive_frequency_hz,

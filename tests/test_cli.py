@@ -1,6 +1,12 @@
 import pytest
 
-from deviation_meter.cli import _parse_frequency, main
+from deviation_meter.cli import _build_parser, _parse_frequency, main
+
+
+def test_parser_uses_devstation_branding() -> None:
+    parser = _build_parser()
+    assert parser.prog == "devstation"
+    assert "DeviationStation" in parser.description
 
 
 def test_demo_runs_m17_measurement(capsys) -> None:

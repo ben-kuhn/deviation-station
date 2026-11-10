@@ -1,4 +1,4 @@
-"""GNU Radio FM deviation meter measurement core."""
+"""DeviationStation measurement core."""
 
 from .bessel import (
     BESSEL_J0_ZEROS,
@@ -37,3 +37,5 @@ __all__ = [
 ]
 
 __version__ = "0.1.0"
+APPLICATION_NAME = "deviation-station"
+DISPLAY_NAME = "DeviationStation"

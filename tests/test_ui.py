@@ -53,6 +53,7 @@ def test_unkey_ptt_treats_false_readback_as_success(monkeypatch) -> None:
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     try:
+        assert window.windowTitle() == "DeviationStation"
         window._ptt_keyed = True
         window._ptt_timer.start(1_000)
         assert window._unkey_ptt() is True

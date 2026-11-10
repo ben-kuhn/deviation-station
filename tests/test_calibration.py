@@ -45,6 +45,7 @@ def test_save_bessel_verification_record(tmp_path: Path) -> None:
     )
     path = save_bessel_verification(record, directory=tmp_path)
     payload = json.loads(path.read_text())
+    assert payload["application"]["name"] == "deviation-station"
     assert payload["kind"] == "bessel-null-verification"
     assert payload["verified_deviation_hz"] == pytest.approx(2404.8256)
     assert payload["device"]["device_args"] == "driver=rtlsdr"

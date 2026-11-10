@@ -1,5 +1,5 @@
 {
-  description = "GNU Radio FM deviation meter";
+  description = "DeviationStation: a GNU Radio FM deviation instrument";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -35,6 +35,8 @@
         in
         {
           default = pkgs.callPackage ./nix/package.nix { };
+          deviation-station = self.packages.${system}.default;
+          # Compatibility alias for existing flake consumers.
           gnuradio-deviation-meter = self.packages.${system}.default;
         }
       );
@@ -42,7 +44,7 @@
       apps = forAllSystems (system: {
         default = {
           type = "app";
-          program = "${self.packages.${system}.default}/bin/deviation-meter";
+          program = "${self.packages.${system}.default}/bin/devstation";
         };
       });
 

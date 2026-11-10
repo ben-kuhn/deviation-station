@@ -201,7 +201,7 @@ class RemoteDirewolfCalibration:
                 f"(PID {', '.join(str(pid) for pid in pids)})"
             )
         result = self.transport.run(
-            ["mktemp", "-d", "/tmp/deviation-meter-direwolf.XXXXXX"],
+            ["mktemp", "-d", "/tmp/deviationstation-direwolf.XXXXXX"],
             timeout=10.0,
         )
         remote_dir = result.stdout.strip()

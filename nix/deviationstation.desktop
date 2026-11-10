@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=DeviationStation
+GenericName=FM Deviation Instrument
+Comment=A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card modem calibration.
+Exec=devstation gui
+Icon=radio
+Terminal=false
+StartupNotify=true
+StartupWMClass=DeviationStation
+Categories=HamRadio;Utility;
+Keywords=deviation;FM;Bessel;radio;repeater;modem;

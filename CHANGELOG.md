@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Branding and compatibility
+
+- Renamed the product to **DeviationStation** with the CLI `devstation`.
+- Kept `deviation-meter` as an executable alias, the `deviation_meter` Python
+  module, and the legacy calibration data directory for compatibility.
+- Added a desktop entry for DeviationStation.
+- Existing Qt settings are migrated from the old application identity on first
+  launch.
+
 ### Auto-Calibrate
 
 - Added remote Direwolf calibration over SSH. The local application starts a

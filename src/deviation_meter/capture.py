@@ -16,7 +16,7 @@ from typing import Any, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from . import __version__
+from . import APPLICATION_NAME, __version__
 
 ComplexArray = NDArray[np.complex64]
 DEFAULT_CHUNK_SAMPLES = 65_536
@@ -314,7 +314,7 @@ def capture_iq(
     metadata: dict[str, Any] = {
         "schema_version": 1,
         "application": {
-            "name": "gnuradio-deviation-meter",
+            "name": APPLICATION_NAME,
             "version": __version__,
         },
         "format": {

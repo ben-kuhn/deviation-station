@@ -30,7 +30,7 @@ class FakeTransport:
         self.commands.append((command, kwargs.get("input")))
         text = ""
         if command[:2] == ["mktemp", "-d"]:
-            text = "/tmp/deviation-meter-direwolf.test\n"
+            text = "/tmp/deviationstation-direwolf.test\n"
         elif command and command[0] == "direwolf" and command[1] == "-h":
             text = self.version_output
         return subprocess.CompletedProcess(command, 0, text, "")
@@ -126,8 +126,8 @@ def test_remote_direwolf_starts_and_cleans_up(tmp_path: Path) -> None:
     )
 
     assert calibration.start(0.0) == stream
-    config_path = "/tmp/deviation-meter-direwolf.test/calibration.conf"
-    script_path = "/tmp/deviation-meter-direwolf.test/run.sh"
+    config_path = "/tmp/deviationstation-direwolf.test/calibration.conf"
+    script_path = "/tmp/deviationstation-direwolf.test/run.sh"
     assert "PTT RIG 2 127.0.0.1:4532" in transport.files[config_path]
     assert "-x m" in transport.files[script_path]
     assert "timeout --signal=INT" in transport.files[script_path]

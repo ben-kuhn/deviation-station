@@ -1,4 +1,4 @@
-# GNU Radio Deviation Meter — Project Plan
+# DeviationStation — Project Plan
 
 ## 1. Project summary
 
@@ -605,7 +605,7 @@ The main repository will provide:
 
 - `flake.nix` and a committed `flake.lock` pinning the development nixpkgs revision.
 - A development shell containing GNU Radio, SoapySDR with the RTL-SDR plugin, Python, NumPy/SciPy, PyQt6, PipeWire/PulseAudio client libraries, Hamlib, and test tooling.
-- A `packages.default` build that installs the `deviation-meter` executable, desktop entry, icon, and application data.
+- A `packages.default` build that installs the `devstation` executable, desktop entry, icon, and application data.
 - A package that wires the application into GNU Radio's wrapped Python environment, including the required `PYTHONPATH` and Qt runtime hooks, rather than assuming that the system Python can import `gnuradio`.
 - SoapySDR module/plugin paths needed to discover RTL-SDR and other installed devices.
 - A `checks` derivation that runs the simulator, Bessel, discriminator, and controller tests without requiring radio hardware.
@@ -619,7 +619,7 @@ After the source is published and tagged, add the application to the neighboring
 
 ```text
 ../nix-ham-packages/
-  gnuradio-deviation-meter/
+  deviation-station/
     default.nix
 ```
 
@@ -627,7 +627,7 @@ The overlay entry will:
 
 - Fetch a tagged source revision with `fetchFromGitHub`.
 - Build with `callPackage` and use Nixpkgs' GNU Radio, SoapySDR, Qt, and Python environments.
-- Install the `deviation-meter` executable as the package's `mainProgram`.
+- Install the `devstation` executable as the package's `mainProgram`.
 - Include a desktop entry so the application can be launched from a graphical session.
 - Preserve compatibility with the overlay's existing nixpkgs input rather than depending on the application repository's flake pin.
 - Allow local development by overriding `src` with the working tree without committing vendored source to `nix-ham-packages`.
@@ -635,7 +635,7 @@ The overlay entry will:
 The root `default.nix` will expose the package as:
 
 ```nix
-gnuradio-deviation-meter = prev.callPackage ./gnuradio-deviation-meter { };
+deviation-station = prev.callPackage ./deviation-station { };
 ```
 
 The overlay README will list the package, its purpose, and the installation attribute. The application README will document both `nix run` from the project repository and installation through the ham-packages overlay.
@@ -737,8 +737,8 @@ The overlay README will list the package, its purpose, and the installation attr
 - Perform repeated simulated and RF tests across supported devices and profiles.
 - Document installation, RF coupling, `rigctld`, audio routing, safety, calibration, and operating procedures.
 - Publish a tagged application release consumable by the overlay.
-- Add and test `../nix-ham-packages/gnuradio-deviation-meter/default.nix`.
-- Register `gnuradio-deviation-meter` in the overlay's root `default.nix` and README.
+- Add and test `../nix-ham-packages/deviation-station/default.nix`.
+- Register `deviation-station` in the overlay's root `default.nix` and README.
 - Build and launch the application from the overlay's own nixpkgs revision.
 
 ## 15. Acceptance criteria
@@ -783,7 +783,7 @@ The overlay README will list the package, its purpose, and the installation attr
 - Provides a locked flake with a development shell containing GNU Radio, SoapySDR, Qt, Python dependencies, and test tooling.
 - Builds and launches the packaged application with GNU Radio's wrapped Python environment and without relying on globally installed Python packages.
 - Runs hardware-free checks through the Nix package/flake.
-- Adds `gnuradio-deviation-meter` to `../nix-ham-packages` and its README.
+- Adds `deviation-station` to `../nix-ham-packages` and its README.
 - Successfully builds the tagged application from the overlay's own nixpkgs revision.
 
 ### Documentation and tests

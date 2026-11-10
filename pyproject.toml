@@ -3,9 +3,9 @@ requires = [ "hatchling>=1.25" ]
 build-backend = "hatchling.build"
 
 [project]
-name = "gnuradio-deviation-meter"
+name = "deviation-station"
 version = "0.1.0"
-description = "Bessel-null and discriminator-based FM deviation meter for GNU Radio"
+description = "A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card modem calibration."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -29,6 +29,8 @@ dev = [
 ]
 
 [project.scripts]
+devstation = "deviation_meter.cli:main"
+# Compatibility alias for existing scripts and desktop entries.
 deviation-meter = "deviation_meter.cli:main"
 
 [tool.hatch.build.targets.wheel]

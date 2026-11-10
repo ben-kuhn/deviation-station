@@ -209,11 +209,10 @@ def _add_analysis_parser(subparsers: argparse._SubParsersAction) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="deviation-meter",
+        prog="devstation",
         description=(
-            "GNU Radio FM deviation meter with Bessel-null and "
-            "discriminator-based measurement, live SoapySDR reception, and "
-            "network rigctld control."
+            "DeviationStation: a GNU Radio FM deviation instrument for bench "
+            "work, repeaters, and sound-card modem calibration."
         ),
     )
     parser.add_argument("--version", action="version", version=__version__)

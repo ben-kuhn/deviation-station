@@ -338,7 +338,7 @@ class GnuRadioLiveSession:
         ).astype(np.float32)
 
         try:
-            top_block = gr.top_block("deviation-meter-live", catch_exceptions=True)
+            top_block = gr.top_block("deviationstation-live", catch_exceptions=True)
             if config.simulator:
                 waveform = _simulated_waveform(
                     config.profile_name,

@@ -44,6 +44,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import DISPLAY_NAME
 from .audio import AudioToneError, TonePlayer
 from .auto_cal import (
     AutoCalConfig,
@@ -991,15 +992,27 @@ class DeviceDialog(QDialog):
         )
 
 
+def _migrate_legacy_settings(store: QSettings) -> None:
+    """Copy settings from the pre-rename application identity once."""
+
+    if store.allKeys():
+        return
+    legacy = QSettings("gnuradio-deviation-meter", "deviation-meter")
+    legacy_keys = legacy.allKeys()
+    if not legacy_keys:
+        return
+    for key in legacy_keys:
+        store.setValue(key, legacy.value(key))
+    store.sync()
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("GNU Radio Deviation Meter")
+        self.setWindowTitle(DISPLAY_NAME)
         self.setMinimumSize(1280, 720)
-        self._settings_store = QSettings(
-            "gnuradio-deviation-meter",
-            "deviation-meter",
-        )
+        self._settings_store = QSettings(DISPLAY_NAME, DISPLAY_NAME)
+        _migrate_legacy_settings(self._settings_store)
         self._device = self._load_device_settings()
         self._session: GnuRadioLiveSession | None = None
         self._bessel_detector: BesselNullDetector | None = None
@@ -4023,6 +4036,10 @@ def run_gui() -> int:
     # explicit user override.
     _configure_qt_decoration_environment()
     app = QApplication.instance() or QApplication(sys.argv)
+    app.setApplicationName(DISPLAY_NAME)
+    app.setApplicationDisplayName(DISPLAY_NAME)
+    app.setOrganizationName(DISPLAY_NAME)
+    app.setDesktopFileName("deviationstation")
     app.setFont(QFont("DejaVu Sans", 11))
     window = MainWindow()
     window.showMaximized()

@@ -51,7 +51,7 @@ let
   ];
 in
 stdenv.mkDerivation {
-  pname = "gnuradio-deviation-meter";
+  pname = "deviation-station";
   version = version;
   src = applicationSrc;
 
@@ -92,7 +92,7 @@ stdenv.mkDerivation {
     cp -r "${applicationSrc}/src/deviation_meter" "${sitePackages}/deviation_meter"
 
     mkdir -p "$out/bin"
-    makeWrapper "${pythonEnv}/bin/python3" "$out/bin/deviation-meter" \
+    makeWrapper "${pythonEnv}/bin/python3" "$out/bin/devstation" \
       --add-flags "-m deviation_meter" \
       --prefix PYTHONPATH : "${sitePackages}" \
       --prefix SOAPY_SDR_PLUGIN_PATH : "${soapyPluginPath}" \
@@ -102,22 +102,27 @@ stdenv.mkDerivation {
       --prefix GSETTINGS_SCHEMAS_PATH : "${settingsSchemaPath}" \
       --prefix XDG_DATA_DIRS : "${xdgDataPath}"
 
-    install -Dm644 "${applicationSrc}/README.md" "$out/share/doc/gnuradio-deviation-meter/README.md"
-    install -Dm644 "${applicationSrc}/PROJECT_PLAN.md" "$out/share/doc/gnuradio-deviation-meter/PROJECT_PLAN.md"
+    # Keep the old executable name working for existing scripts.
+    ln -s devstation "$out/bin/deviation-meter"
+
+    install -Dm644 "${applicationSrc}/README.md" "$out/share/doc/deviation-station/README.md"
+    install -Dm644 "${applicationSrc}/PROJECT_PLAN.md" "$out/share/doc/deviation-station/PROJECT_PLAN.md"
+    install -Dm644 "${applicationSrc}/nix/deviationstation.desktop" \
+      "$out/share/applications/deviationstation.desktop"
 
     runHook postInstall
   '';
 
   meta = with lib; {
-    description = "Bessel-null and discriminator-based FM deviation meter";
+    description = "A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card modem calibration.";
     longDescription = ''
-      A GNU Radio application for measuring FM deviation using Bessel carrier
-      nulls and discriminator-based digital waveform analysis. Intended for
-      amateur-radio bench work, MMDVM/Module17 adjustment, and sound-card modem
-      calibration.
+      DeviationStation measures FM deviation using Bessel carrier nulls and
+      discriminator-based digital waveform analysis. Intended for amateur-radio
+      bench work, repeater adjustment, MMDVM/Module17 setup, and sound-card
+      modem calibration.
     '';
-    homepage = "https://github.com/ben-kuhn/gnuradio-deviation-meter";
+    homepage = "https://github.com/ben-kuhn/deviation-station";
     platforms = platforms.linux;
-    mainProgram = "deviation-meter";
+    mainProgram = "devstation";
   };
 }

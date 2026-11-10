@@ -1,7 +1,11 @@
-# GNU Radio Deviation Meter
+# DeviationStation
 
-A GNU Radio-based FM deviation instrument for amateur-radio bench work and
-sound-card modem calibration.
+A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card
+modem calibration.
+
+The CLI is `devstation`. The pre-rename `deviation-meter` command, Python module
+(`deviation_meter`), and calibration directory remain available as compatibility
+aliases.
 
 The application combines two measurement engines:
 
@@ -72,7 +76,7 @@ Build the application package:
 
 ```bash
 nix build
-result/bin/deviation-meter demo
+result/bin/devstation demo
 ```
 
 The executable provides the graphical live measurement interface, simulator
@@ -111,7 +115,7 @@ For exact GNOME title-bar placement and server-side decoration behavior, launch
 the app through XWayland instead:
 
 ```bash
-QT_QPA_PLATFORM=xcb ~/.nix-profile/bin/deviation-meter gui
+QT_QPA_PLATFORM=xcb ~/.nix-profile/bin/devstation gui
 ```
 
 ### Native file dialogs on Nix
@@ -134,7 +138,7 @@ The packaged wrapper now sets:
 
 This keeps the native dialog enabled even when launched from a system service
 or minimal environment. If running the Python package directly rather than
-through `result/bin/deviation-meter` or `nix run`, set `GSETTINGS_SCHEMA_DIR`
+through `result/bin/devstation` or `nix run`, set `GSETTINGS_SCHEMA_DIR`
 to:
 
 ```text
@@ -458,7 +462,8 @@ $XDG_DATA_HOME/gnuradio-deviation-meter/calibrations
 ```
 
 or `~/.local/share/gnuradio-deviation-meter/calibrations` when `XDG_DATA_HOME`
-is unset.
+is unset. This legacy path is retained so existing calibration records remain
+available after the DeviationStation rename.
 
 ## Recording IQ fixtures
 
