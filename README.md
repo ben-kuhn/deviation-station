@@ -18,8 +18,9 @@ The UI provides a large white-on-dark analog meter, digital deviation readout,
 waterfall, shared receive-frequency controls, and separate **Measure** and
 **Auto-Calibrate** tabs.
 
-See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full design and implementation
-roadmap and [CHANGELOG.md](CHANGELOG.md) for release notes.
+See [INSTALL.md](INSTALL.md) for non-Nix installation and distribution
+packaging, [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full design and
+implementation roadmap, and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Current status
 

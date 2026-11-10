@@ -106,6 +106,7 @@ stdenv.mkDerivation {
     ln -s devstation "$out/bin/deviation-meter"
 
     install -Dm644 "${applicationSrc}/README.md" "$out/share/doc/deviation-station/README.md"
+    install -Dm644 "${applicationSrc}/INSTALL.md" "$out/share/doc/deviation-station/INSTALL.md"
     install -Dm644 "${applicationSrc}/PROJECT_PLAN.md" "$out/share/doc/deviation-station/PROJECT_PLAN.md"
     install -Dm644 "${applicationSrc}/nix/deviationstation.desktop" \
       "$out/share/applications/deviationstation.desktop"

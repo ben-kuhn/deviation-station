@@ -10,6 +10,8 @@
 - Added a desktop entry for DeviationStation.
 - Existing Qt settings are migrated from the old application identity on first
   launch.
+- Added packaging metadata and [INSTALL.md](INSTALL.md) for non-Nix Python
+  installation, wheel/sdist builds, and distribution packaging.
 
 ### Auto-Calibrate
 
