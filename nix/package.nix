@@ -123,6 +123,7 @@ stdenv.mkDerivation {
       modem calibration.
     '';
     homepage = "https://github.com/ben-kuhn/deviation-station";
+    license = licenses.gpl3Plus;
     platforms = platforms.linux;
     mainProgram = "devstation";
   };
