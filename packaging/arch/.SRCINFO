@@ -1,0 +1,27 @@
+pkgbase = deviation-station
+	pkgdesc = A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card modem calibration
+	pkgver = 0.1.0
+	pkgrel = 1
+	url = https://github.com/ben-kuhn/deviation-station
+	arch = x86_64
+	arch = i686
+	arch = aarch64
+	arch = armv7h
+	license = GPL-3.0-or-later
+	provides = deviation-meter
+	depends = python
+	depends = python-numpy
+	depends = python-scipy
+	depends = gnuradio
+	depends = soapysdr
+	depends = python-pyqt6
+	makedepends = python-build
+	makedepends = python-installer
+	makedepends = python-hatchling
+	optdepends = soapysdr-module-rtlsdr: RTL-SDR support
+	optdepends = soapysdr-module-airspy: Airspy support
+	optdepends = soapysdr-module-hackrf: HackRF support
+	source = deviation-station-0.1.0.tar.gz::https://github.com/ben-kuhn/deviation-station/archive/6b7488bef7eed76ca6d6d9461a08ccaaf4dbc47b.tar.gz
+	sha256sums = 021b2a1916d081061fc2bb3db555a39b2a9bc185d739dcd837da9306e15c671e
+
+pkgname = deviation-station

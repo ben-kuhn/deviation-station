@@ -1,0 +1,49 @@
+# Maintainer: Ben Kuhn <ku0hn@ku0hn.radio>
+pkgname=deviation-station
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='A GNU Radio FM deviation instrument for bench work, repeaters, and sound-card modem calibration'
+arch=('x86_64' 'i686' 'aarch64' 'armv7h')
+url='https://github.com/ben-kuhn/deviation-station'
+license=('GPL-3.0-or-later')
+depends=(
+  'python'
+  'python-numpy'
+  'python-scipy'
+  'gnuradio'
+  'soapysdr'
+  'python-pyqt6'
+)
+makedepends=(
+  'python-build'
+  'python-installer'
+  'python-hatchling'
+)
+optdepends=(
+  'soapysdr-module-rtlsdr: RTL-SDR support'
+  'soapysdr-module-airspy: Airspy support'
+  'soapysdr-module-hackrf: HackRF support'
+)
+provides=('deviation-meter')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/ben-kuhn/deviation-station/archive/6b7488bef7eed76ca6d6d9461a08ccaaf4dbc47b.tar.gz")
+sha256sums=('021b2a1916d081061fc2bb3db555a39b2a9bc185d739dcd837da9306e15c671e')
+
+build() {
+  cd "deviation-station-6b7488bef7eed76ca6d6d9461a08ccaaf4dbc47b"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "deviation-station-6b7488bef7eed76ca6d6d9461a08ccaaf4dbc47b"
+
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 nix/deviationstation.desktop \
+    "$pkgdir/usr/share/applications/deviationstation.desktop"
+  install -Dm644 LICENSE \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md \
+    "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 INSTALL.md \
+    "$pkgdir/usr/share/doc/$pkgname/INSTALL.md"
+}

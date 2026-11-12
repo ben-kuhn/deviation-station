@@ -1,0 +1,151 @@
+name: Distribution packages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nfpm:
+    name: ${{ matrix.label }} deb/rpm
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: amd64
+            deb_arch: amd64
+            rpm_arch: x86_64
+          - label: i386
+            deb_arch: i386
+            rpm_arch: i686
+          - label: arm64
+            deb_arch: arm64
+            rpm_arch: aarch64
+          - label: armhf
+            deb_arch: armhf
+            rpm_arch: armv7hl
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging tools
+        run: |
+          python -m pip install --upgrade pip build
+          curl -fsSL \
+            https://github.com/goreleaser/nfpm/releases/download/v2.49.0/nfpm_2.49.0_Linux_x86_64.tar.gz \
+            | tar -xz -C /tmp nfpm
+          sudo install -m755 /tmp/nfpm /usr/local/bin/nfpm
+
+      - name: Build packages
+        run: |
+          VERSION="$(python - <<'PY'
+          import tomllib
+          with open("pyproject.toml", "rb") as f:
+              print(tomllib.load(f)["project"]["version"])
+          PY
+          )"
+          ./packaging/build-nfpm.sh \
+            --version "$VERSION" \
+            --deb-arch "${{ matrix.deb_arch }}" \
+            --rpm-arch "${{ matrix.rpm_arch }}" \
+            --output-dir dist/packages
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deviation-station-${{ matrix.label }}
+          path: dist/packages/*
+          if-no-files-found: error
+          retention-days: 14
+
+  pkgbuild:
+    name: Arch PKGBUILD
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in an Arch container
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src archlinux:base-devel bash -lc '
+            pacman -Syu --noconfirm --needed base-devel python-build python-installer python-hatchling
+            useradd -m builder
+            chown -R builder:builder /src
+            cd /src/packaging/arch
+            su builder -c "makepkg --nodeps --noconfirm"
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deviation-station-arch
+          path: packaging/arch/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Install ${{ matrix.image }}
+    needs: nfpm
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:bookworm
+            kind: deb
+          - image: ubuntu:24.04
+            kind: deb
+          - image: fedora:latest
+            kind: rpm
+          - image: opensuse/tumbleweed
+            kind: rpm
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deviation-station-amd64
+          path: dist
+
+      - name: Install and run
+        run: |
+          docker run --rm -v "$PWD/dist:/pkg:ro" "${{ matrix.image }}" sh -c '
+            set -eu
+            if [ "${{ matrix.kind }}" = deb ]; then
+              apt-get update
+              apt-get install -y --no-install-recommends /pkg/*.deb
+            else
+              if command -v dnf >/dev/null 2>&1; then
+                dnf install -y --setopt=install_weak_deps=False /pkg/*.rpm
+              else
+                zypper --non-interactive --no-gpg-checks install --no-recommends /pkg/*.rpm
+              fi
+            fi
+            devstation --version
+            devstation demo --profile m17
+          '
+
+  release:
+    name: Publish tagged release assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [nfpm, pkgbuild]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deviation-station-*
+          path: release
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.deb
+            release/*.rpm
+            release/*.pkg.tar.zst

@@ -37,6 +37,8 @@ NixOS users can install `pkgs.deviation-station` from
 
 See [INSTALL.md](INSTALL.md) for Python, Conda, wheel, and distribution
 packaging instructions. GNU Radio, SoapySDR, and Qt 6 are system dependencies.
+Tagged releases also publish Debian, RPM, and Arch packages built by CI; see
+[packaging/README.md](packaging/README.md).
 
 ```bash
 python3 -m venv --system-site-packages .venv

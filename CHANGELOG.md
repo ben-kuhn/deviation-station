@@ -12,6 +12,8 @@
   launch.
 - Added packaging metadata and [INSTALL.md](INSTALL.md) for non-Nix Python
   installation, wheel/sdist builds, and distribution packaging.
+- Added Debian/RPM packaging via nfpm, an Arch `PKGBUILD`, and CI/CD that
+  builds and smoke-tests x86, x86_64, AArch64, and ARMv7 packages.
 
 ### Auto-Calibrate
 
