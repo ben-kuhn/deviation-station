@@ -2,14 +2,14 @@ import math
 
 import pytest
 
-from deviation_meter.auto_cal import (
+from deviation_station.auto_cal import (
     AutoCalConfig,
     AutoCalController,
     AutoCalError,
     AutoCalState,
 )
-from deviation_meter.bessel import BesselProgress
-from deviation_meter.measurement import (
+from deviation_station.bessel import BesselProgress
+from deviation_station.measurement import (
     DeviationReading,
     MeasurementEngine,
     MeasurementQuality,

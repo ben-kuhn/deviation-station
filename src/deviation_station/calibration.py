@@ -19,15 +19,11 @@ class CalibrationError(ValueError):
 
 
 def default_calibration_dir() -> Path:
-    """Return the per-user calibration directory.
-
-    The legacy application directory is intentionally retained so existing
-    calibration records remain discoverable after the DeviationStation rename.
-    """
+    """Return the per-user calibration directory."""
 
     data_home = os.environ.get("XDG_DATA_HOME")
     base = Path(data_home) if data_home else Path.home() / ".local" / "share"
-    return base / "gnuradio-deviation-meter" / "calibrations"
+    return base / "deviation-station" / "calibrations"
 
 
 @dataclass(frozen=True, slots=True)

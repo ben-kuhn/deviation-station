@@ -134,7 +134,7 @@ class SshTransport:
         self.run(["rm", "-rf", "--", path], timeout=10.0, check=False)
 
     def pipewire_runner(self, argv: Sequence[str], **kwargs) -> subprocess.CompletedProcess:
-        """Adapter for :mod:`deviation_meter.pipewire` command helpers."""
+        """Adapter for :mod:`deviation_station.pipewire` command helpers."""
 
         timeout = float(kwargs.get("timeout", 5.0) or 5.0)
         return self.run(

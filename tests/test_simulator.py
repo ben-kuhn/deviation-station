@@ -3,8 +3,8 @@ import math
 import numpy as np
 import pytest
 
-from deviation_meter.discriminator import quadrature_demod_frequency
-from deviation_meter.simulator import (
+from deviation_station.discriminator import quadrature_demod_frequency
+from deviation_station.simulator import (
     SimulationError,
     fsk4_frequency_trajectory,
     fsk4_iq,

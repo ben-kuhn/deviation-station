@@ -36,8 +36,6 @@
         {
           default = pkgs.callPackage ./nix/package.nix { };
           deviation-station = self.packages.${system}.default;
-          # Compatibility alias for existing flake consumers.
-          gnuradio-deviation-meter = self.packages.${system}.default;
         }
       );
 

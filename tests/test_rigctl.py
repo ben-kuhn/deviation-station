@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from deviation_meter.rigctl import RigctldClient, RigctldError
+from deviation_station.rigctl import RigctldClient, RigctldError
 
 
 class FakeRigctld:

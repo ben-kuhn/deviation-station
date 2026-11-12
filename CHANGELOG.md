@@ -2,14 +2,11 @@
 
 ## Unreleased
 
-### Branding and compatibility
+### Branding
 
-- Renamed the product to **DeviationStation** with the CLI `devstation`.
-- Kept `deviation-meter` as an executable alias, the `deviation_meter` Python
-  module, and the legacy calibration data directory for compatibility.
+- Renamed the product to **DeviationStation** with the CLI `devstation` and
+  Python package `deviation_station`.
 - Added a desktop entry for DeviationStation.
-- Existing Qt settings are migrated from the old application identity on first
-  launch.
 - Added packaging metadata and [INSTALL.md](INSTALL.md) for non-Nix Python
   installation, wheel/sdist builds, and distribution packaging.
 - Added Debian/RPM packaging via nfpm, an Arch `PKGBUILD`, and CI/CD that

@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from deviation_meter.discriminator import (
+from deviation_station.discriminator import (
     DiscriminatorError,
     four_fsk_symbol_deviation,
     one_dimensional_kmeans,

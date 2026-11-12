@@ -24,8 +24,8 @@ Options:
   --wheel PATH           Use an existing wheel instead of building one
   -h, --help             Show this help
 
-The package contains the wheel plus /usr/bin/devstation,
-/usr/bin/deviation-meter, the desktop entry, and documentation.
+The package contains the wheel plus /usr/bin/devstation, the desktop entry,
+and documentation.
 EOF
 }
 
@@ -81,7 +81,6 @@ with zipfile.ZipFile(sys.argv[1]) as wheel:
 PY
 
 install -Dm755 "$ROOT/packaging/devstation" "$STAGE/usr/bin/devstation"
-install -Dm755 "$ROOT/packaging/deviation-meter" "$STAGE/usr/bin/deviation-meter"
 install -Dm644 "$ROOT/nix/deviationstation.desktop" \
   "$STAGE/usr/share/applications/deviationstation.desktop"
 install -Dm644 "$ROOT/LICENSE" \

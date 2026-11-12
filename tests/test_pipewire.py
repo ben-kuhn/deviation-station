@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 import pytest
 
-from deviation_meter.pipewire import (
+from deviation_station.pipewire import (
     PipeWireError,
     find_output_stream,
     get_stream_volume,

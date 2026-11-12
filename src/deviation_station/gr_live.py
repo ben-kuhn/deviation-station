@@ -105,7 +105,7 @@ class SpectrumSink(gr.sync_block):
     def __init__(self, state: LiveState) -> None:
         gr.sync_block.__init__(
             self,
-            name="deviation_meter_spectrum_sink",
+            name="deviation_station_spectrum_sink",
             in_sig=[(np.complex64, FFT_SIZE)],
             out_sig=None,
         )
@@ -147,7 +147,7 @@ class MeasurementSink(gr.sync_block):
         self._state = state
         gr.sync_block.__init__(
             self,
-            name="deviation_meter_measurement_sink",
+            name="deviation_station_measurement_sink",
             in_sig=[np.complex64, np.float32],
             out_sig=None,
         )

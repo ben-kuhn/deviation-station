@@ -9,12 +9,12 @@ from PyQt6.QtCore import QSettings  # noqa: E402
 from PyQt6.QtGui import QFontMetrics  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from deviation_meter.target_cal import (  # noqa: E402
+from deviation_station.target_cal import (  # noqa: E402
     TargetCalProgress,
     TargetCalState,
 )
-from deviation_meter.tone import ToneEstimate  # noqa: E402
-from deviation_meter.ui import (  # noqa: E402
+from deviation_station.tone import ToneEstimate  # noqa: E402
+from deviation_station.ui import (  # noqa: E402
     DeviceDialog,
     DeviceSettings,
     DeviationReferenceDialog,
@@ -49,7 +49,7 @@ def test_unkey_ptt_treats_false_readback_as_success(monkeypatch) -> None:
             calls.append(enabled)
             return False
 
-    monkeypatch.setattr("deviation_meter.ui.RigctldClient", FakeRigctldClient)
+    monkeypatch.setattr("deviation_station.ui.RigctldClient", FakeRigctldClient)
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
     try:

@@ -1,6 +1,6 @@
 import pytest
 
-from deviation_meter.reference import (
+from deviation_station.reference import (
     GENERIC_FM_REFERENCE,
     MMDVM_DMR_REFERENCE,
     MODULE17_M17_REFERENCE,

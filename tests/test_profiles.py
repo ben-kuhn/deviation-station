@@ -1,15 +1,15 @@
 import numpy as np
 import pytest
 
-from deviation_meter.discriminator import DiscriminatorError, quadrature_demod_frequency
-from deviation_meter.measurement import MeasurementEngine, ReadingStatus
-from deviation_meter.profiles import (
+from deviation_station.discriminator import DiscriminatorError, quadrature_demod_frequency
+from deviation_station.measurement import MeasurementEngine, ReadingStatus
+from deviation_station.profiles import (
     GENERIC_FM_PROFILE,
     GenericFmProfile,
     MODULE17_M17_PROFILE,
     MMDVM_DMR_PROFILE,
 )
-from deviation_meter.simulator import fsk4_iq, sinusoidal_fm_iq
+from deviation_station.simulator import fsk4_iq, sinusoidal_fm_iq
 
 
 @pytest.mark.parametrize(

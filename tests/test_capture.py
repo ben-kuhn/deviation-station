@@ -6,7 +6,7 @@ import pytest
 
 from types import SimpleNamespace
 
-from deviation_meter.capture import (
+from deviation_station.capture import (
     CaptureConfig,
     CaptureError,
     IQRead,

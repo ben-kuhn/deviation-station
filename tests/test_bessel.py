@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from deviation_meter.bessel import (
+from deviation_station.bessel import (
     BESSEL_J0_ZEROS,
     BesselNullDetector,
     BesselNullError,
@@ -11,8 +11,8 @@ from deviation_meter.bessel import (
     carrier_null_tone_frequency,
     deviation_from_carrier_null,
 )
-from deviation_meter.measurement import MeasurementEngine
-from deviation_meter.simulator import sinusoidal_fm_iq
+from deviation_station.measurement import MeasurementEngine
+from deviation_station.simulator import sinusoidal_fm_iq
 
 
 def _normalized_carrier_amplitude(iq: np.ndarray) -> float:

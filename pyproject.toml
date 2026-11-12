@@ -48,12 +48,10 @@ Repository = "https://github.com/ben-kuhn/deviation-station"
 Issues = "https://github.com/ben-kuhn/deviation-station/issues"
 
 [project.scripts]
-devstation = "deviation_meter.cli:main"
-# Compatibility alias for existing scripts and desktop entries.
-deviation-meter = "deviation_meter.cli:main"
+devstation = "deviation_station.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = [ "src/deviation_meter" ]
+packages = [ "src/deviation_station" ]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

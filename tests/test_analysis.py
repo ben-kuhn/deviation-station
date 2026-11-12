@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from deviation_meter.analysis import (
+from deviation_station.analysis import (
     AnalysisError,
     analyze_capture,
     channel_spectral_flatness,
@@ -12,9 +12,9 @@ from deviation_meter.analysis import (
     measure_channelized_frequency,
     write_analysis_report,
 )
-from deviation_meter.discriminator import quadrature_demod_frequency
-from deviation_meter.profiles import GENERIC_FM_PROFILE
-from deviation_meter.simulator import fsk4_iq
+from deviation_station.discriminator import quadrature_demod_frequency
+from deviation_station.profiles import GENERIC_FM_PROFILE
+from deviation_station.simulator import fsk4_iq
 
 
 def _write_fixture(

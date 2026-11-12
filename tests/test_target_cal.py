@@ -2,13 +2,13 @@ import math
 
 import pytest
 
-from deviation_meter.measurement import (
+from deviation_station.measurement import (
     DeviationReading,
     MeasurementEngine,
     MeasurementQuality,
     ReadingStatus,
 )
-from deviation_meter.target_cal import (
+from deviation_station.target_cal import (
     TargetCalConfig,
     TargetCalController,
     TargetCalError,

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from deviation_meter.direwolf import (
+from deviation_station.direwolf import (
     DirewolfCalibration,
     DirewolfConfig,
     DirewolfError,
@@ -12,7 +12,7 @@ from deviation_meter.direwolf import (
     probe_direwolf,
     profile_tone_hz,
 )
-from deviation_meter.pipewire import StreamNode
+from deviation_station.pipewire import StreamNode
 
 
 def _write_config(tmp_path: Path, body: str) -> Path:

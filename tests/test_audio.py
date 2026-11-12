@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from deviation_meter.audio import AudioToneError, generate_tone_pcm16
+from deviation_station.audio import AudioToneError, generate_tone_pcm16
 
 
 def test_generate_tone_pcm16() -> None:

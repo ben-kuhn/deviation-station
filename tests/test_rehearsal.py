@@ -1,13 +1,13 @@
 import pytest
 
-from deviation_meter.auto_cal import AutoCalConfig, AutoCalController, AutoCalState
-from deviation_meter.bessel import BesselNullDetector
-from deviation_meter.rehearsal import (
+from deviation_station.auto_cal import AutoCalConfig, AutoCalController, AutoCalState
+from deviation_station.bessel import BesselNullDetector
+from deviation_station.rehearsal import (
     BesselRehearsalPlant,
     RehearsalIO,
     TargetRehearsalPlant,
 )
-from deviation_meter.target_cal import (
+from deviation_station.target_cal import (
     TargetCalConfig,
     TargetCalController,
     TargetCalState,

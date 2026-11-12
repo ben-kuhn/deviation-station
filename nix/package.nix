@@ -89,11 +89,11 @@ stdenv.mkDerivation {
     runHook preInstall
 
     mkdir -p "${sitePackages}"
-    cp -r "${applicationSrc}/src/deviation_meter" "${sitePackages}/deviation_meter"
+    cp -r "${applicationSrc}/src/deviation_station" "${sitePackages}/deviation_station"
 
     mkdir -p "$out/bin"
     makeWrapper "${pythonEnv}/bin/python3" "$out/bin/devstation" \
-      --add-flags "-m deviation_meter" \
+      --add-flags "-m deviation_station" \
       --prefix PYTHONPATH : "${sitePackages}" \
       --prefix SOAPY_SDR_PLUGIN_PATH : "${soapyPluginPath}" \
       --prefix PATH : "${openssh}/bin" \
@@ -101,9 +101,6 @@ stdenv.mkDerivation {
       --prefix GSETTINGS_SCHEMA_DIR : "${settingsSchemaPath}" \
       --prefix GSETTINGS_SCHEMAS_PATH : "${settingsSchemaPath}" \
       --prefix XDG_DATA_DIRS : "${xdgDataPath}"
-
-    # Keep the old executable name working for existing scripts.
-    ln -s devstation "$out/bin/deviation-meter"
 
     install -Dm644 "${applicationSrc}/README.md" "$out/share/doc/deviation-station/README.md"
     install -Dm644 "${applicationSrc}/INSTALL.md" "$out/share/doc/deviation-station/INSTALL.md"

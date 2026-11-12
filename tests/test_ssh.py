@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from deviation_meter.ssh import SshError, SshTransport
+from deviation_station.ssh import SshError, SshTransport
 
 
 def _result(command, returncode=0, stdout="", stderr=""):

@@ -1,9 +1,8 @@
 # Distribution packaging
 
 DeviationStation is a pure-Python application. The distribution packages install
-the wheel under `/usr/lib/deviation-station`, provide `/usr/bin/devstation` and
-the legacy `/usr/bin/deviation-meter` alias, and install the desktop entry and
-documentation.
+the wheel under `/usr/lib/deviation-station`, provide `/usr/bin/devstation`, and
+install the desktop entry and documentation.
 
 GNU Radio, SoapySDR, and Qt 6 remain distribution-provided runtime
 dependencies. The packages do not bundle Python, GNU Radio, or SDR drivers.

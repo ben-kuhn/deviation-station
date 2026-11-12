@@ -48,8 +48,7 @@ devstation demo
 devstation gui
 ```
 
-`devstation` is the installed command. The legacy `deviation-meter` command is
-provided as a compatibility alias.
+`devstation` is the installed command.
 
 ## Conda or Radioconda
 
@@ -79,9 +78,8 @@ wheel into the target environment:
 python -m pip install dist/deviation_station-*.whl
 ```
 
-The Python package name is `deviation-station`; the import package remains
-`deviation_meter` for compatibility with existing calibration tooling and
-records.
+The Python distribution name is `deviation-station`; the import package is
+`deviation_station`.
 
 ## Desktop entry
 
@@ -107,8 +105,7 @@ A distribution package should depend on:
 - PipeWire or PulseAudio for modem/audio calibration
 
 Install the Python sources into the distribution’s site-packages and expose
-the `devstation` console entry point. The `deviation-meter` entry point is
-intentional compatibility surface. No direct ALSA access is required by the
+the `devstation` console entry point. No direct ALSA access is required by the
 application’s normal modem-audio workflow.
 
 ## macOS and Windows

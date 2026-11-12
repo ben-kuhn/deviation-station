@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from deviation_meter.tone import ToneError, detect_tone_hz
+from deviation_station.tone import ToneError, detect_tone_hz
 
 
 def test_detect_tone_from_demodulated_sine() -> None:

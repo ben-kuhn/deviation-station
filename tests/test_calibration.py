@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from deviation_meter.calibration import (
+from deviation_station.calibration import (
     BesselVerificationRecord,
     CalibrationError,
     TargetDeviationRecord,
     save_bessel_verification,
     save_target_deviation,
 )
-from deviation_meter.measurement import (
+from deviation_station.measurement import (
     DeviationReading,
     MeasurementEngine,
     MeasurementQuality,

@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from deviation_meter.gr_live import (
+from deviation_station.gr_live import (
     GnuRadioLiveConfig,
     GnuRadioLiveError,
     GnuRadioLiveSession,

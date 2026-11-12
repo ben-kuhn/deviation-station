@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from deviation_meter.measurement import (
+from deviation_station.measurement import (
     DeviationReading,
     MeasurementEngine,
     MeasurementQuality,

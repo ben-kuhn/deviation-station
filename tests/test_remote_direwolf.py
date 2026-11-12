@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from deviation_meter.direwolf import DirewolfError
-from deviation_meter.pipewire import StreamNode
-from deviation_meter.remote_direwolf import (
+from deviation_station.direwolf import DirewolfError
+from deviation_station.pipewire import StreamNode
+from deviation_station.remote_direwolf import (
     RemoteDirewolfCalibration,
     RemoteDirewolfConfig,
 )

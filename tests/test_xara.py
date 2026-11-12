@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from deviation_meter.xara import XaraCalibration, XaraClient, XaraConfig, XaraError
+from deviation_station.xara import XaraCalibration, XaraClient, XaraConfig, XaraError
 
 
 class FakeXaraServer:

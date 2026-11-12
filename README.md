@@ -47,8 +47,7 @@ python -m pip install ".[gui]"
 devstation doctor
 ```
 
-The installed command is `devstation`. The older `deviation-meter` command
-remains available as a compatibility alias.
+The installed command is `devstation`.
 
 ## Use
 
@@ -236,12 +235,11 @@ Saved Bessel and target-calibration results are written as JSON with a matching
 Markdown report under:
 
 ```text
-$XDG_DATA_HOME/gnuradio-deviation-meter/calibrations
+$XDG_DATA_HOME/deviation-station/calibrations
 ```
 
-or `~/.local/share/gnuradio-deviation-meter/calibrations` when
-`XDG_DATA_HOME` is unset. The legacy directory name is retained so existing
-records remain available.
+or `~/.local/share/deviation-station/calibrations` when `XDG_DATA_HOME` is
+unset.
 
 ## Development
 
