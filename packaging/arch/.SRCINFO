@@ -20,7 +20,7 @@ pkgbase = deviation-station
 	optdepends = soapysdr-module-rtlsdr: RTL-SDR support
 	optdepends = soapysdr-module-airspy: Airspy support
 	optdepends = soapysdr-module-hackrf: HackRF support
-	source = deviation-station-0.1.0.tar.gz::https://github.com/ben-kuhn/deviation-station/archive/6b7488bef7eed76ca6d6d9461a08ccaaf4dbc47b.tar.gz
-	sha256sums = 021b2a1916d081061fc2bb3db555a39b2a9bc185d739dcd837da9306e15c671e
+	source = deviation-station-0.1.0.tar.gz::https://github.com/ben-kuhn/deviation-station/archive/764b6f4a9b73bd6880640d200a91c874f85d26b7.tar.gz
+	sha256sums = f7a0044a09bacb0ee042906bb7f75086601c237adbc41397b8f1228741ddf407
 
 pkgname = deviation-station
