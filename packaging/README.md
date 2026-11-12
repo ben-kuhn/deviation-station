@@ -5,8 +5,8 @@ the wheel under `/usr/lib/deviation-station`, provide `/usr/bin/devstation` and
 the legacy `/usr/bin/deviation-meter` alias, and install the desktop entry and
 documentation.
 
-GNU Radio, SoapySDR, and Qt 6 remain distribution dependencies. The packages do
-not bundle Python, GNU Radio, or SDR drivers.
+GNU Radio, SoapySDR, and Qt 6 remain distribution-provided runtime
+dependencies. The packages do not bundle Python, GNU Radio, or SDR drivers.
 
 ## Debian and RPM
 
